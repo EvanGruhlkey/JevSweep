@@ -22,7 +22,7 @@ def test_wrapped_tool_filters_automatically_and_recovers(tmp_path: Path) -> None
     assert store.read(session.outcomes[0].receipt_id) == raw
 
 
-def test_wrapper_skips_small_and_error_results(tmp_path: Path) -> None:
+def test_wrapper_skips_small_results(tmp_path: Path) -> None:
     judge = FakeJudge(0.0)
     session = PruneSession(
         ReceiptStore(tmp_path),
@@ -32,6 +32,24 @@ def test_wrapper_skips_small_and_error_results(tmp_path: Path) -> None:
     )
     middleware = ToolResultMiddleware(session, minimum_expected_savings=500)
     assert middleware.wrap("read_file", lambda arguments: "short")({}) == "short"
-    error = "Traceback (most recent call last):\n" + noise()
-    assert middleware.wrap("shell", lambda arguments: error)({}) == error
     assert not judge.states
+
+
+def test_protected_diagnostic_survives_while_noise_is_pruned(tmp_path: Path) -> None:
+    store = ReceiptStore(tmp_path)
+    judge = FakeJudge(0.0)
+    session = PruneSession(
+        store,
+        task="fix failing test",
+        judge=judge,
+        config=PruneConfig(minimum_tokens=0),
+    )
+    middleware = ToolResultMiddleware(session, minimum_expected_savings=100)
+    lines = noise().splitlines()
+    lines[500] = "E   AssertionError: expected 3 got 4"
+    raw = "\n".join(lines)
+    filtered = middleware.wrap("shell", lambda arguments: raw)({"command": "pytest -q"})
+    assert filtered != raw
+    assert "AssertionError: expected 3 got 4" in filtered
+    assert store.read(session.outcomes[0].receipt_id) == raw
+    assert judge.states

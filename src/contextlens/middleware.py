@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 from functools import wraps
 from typing import Any
 
-from contextlens.filtering import PruneSession, protected_line
+from contextlens.filtering import PruneSession
 from contextlens.models import estimate_tokens
 
 
@@ -36,8 +36,6 @@ class ToolResultMiddleware:
     def process(self, tool: str, arguments: Mapping[str, Any], result: Any) -> Any:
         """Process a raw result at any host tool-result boundary."""
         if not isinstance(result, str):
-            return result
-        if any(protected_line(line) for line in result.splitlines()):
             return result
         minimum = max(
             self.session.config.minimum_tokens,
