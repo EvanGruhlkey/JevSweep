@@ -1,8 +1,49 @@
-# ContextLens
+# JevSweep (ContextLens package)
 
 ContextLens turns the current coding task into a goal question, asks the
 released SWE-Pruner 0.6B model which source lines matter, then restores the
 Python structure needed to use them. Every original is recoverable.
+
+The package name and CLI remain `contextlens`. The scoring model is the
+released `ayanami-kitasan/code-pruner` checkpoint (Jev); it scores relevance
+only. The host coding agent chooses all tools and actions.
+
+## Integrate at the tool boundary
+
+Install the wrapper in the agent host's tool dispatcher, before the returned
+text is appended to model context. The agent does not call a pruning tool.
+
+```python
+from pathlib import Path
+from contextlens.pruning import ContextPruner, LocalSwePrunerScorer, PruningSession, ReceiptStore
+from contextlens.pruning.middleware import ToolResultMiddleware
+
+store = ReceiptStore(Path(".contextlens/receipts"))
+session = PruningSession(ContextPruner(LocalSwePrunerScorer(), store),
+                         "Fix the refresh-token timeout")
+middleware = ToolResultMiddleware(session)
+
+# Register this callable instead of the original read_file callable.
+agent_tools["read_file"] = middleware.wrap(read_file, "read_file")
+```
+
+`wrap` accepts a synchronous, keyword-argument tool callable returning plain
+text. Nontext results, writes, search results, unsupported languages, short
+reads, errors, test output, and diffs pass through. The default gate only
+calls Jev when a read has at least twice the minimum expected savings (512
+estimated tokens), and only returns a pruning result when it saves that much.
+The estimate uses UTF-8 bytes divided by four; provider token usage may differ.
+Any middleware or scoring error sends the original result. Model latency and
+cost are therefore incurred only for eligible reads; the gate is a heuristic,
+not a measured break-even guarantee.
+
+For long sessions, call `compact_transcript(messages, store)` from
+`contextlens.pruning.transcript` before constructing a model request. It
+replaces older ordinary tool messages with receipt markers, keeps recent
+messages and state-changing or diagnostic output, and retains message order.
+`recover_message(marker_message, store)` restores the complete original
+message. The host must expose receipt recovery to its agent if the agent
+needs to revisit omitted content.
 
 ## See it
 
@@ -152,7 +193,8 @@ contextlens recover cl_0123456789abcdef01234567 \
   --start-line 80 --end-line 130
 ```
 
-Receipts live in `.contextlens/receipts` by default.
+Receipts live in `.contextlens/receipts` by default. Files are read and written
+without newline translation, so recovery preserves CRLF and long lines exactly.
 
 ## Serve
 
@@ -169,6 +211,14 @@ POST /v1/recover
 The server binds to loopback by default and caps request bodies at 16 MiB.
 
 ## Benchmark
+
+`contextlens.pruning.comparison.compare_strategies(tasks, run)` invokes the
+same task list with `baseline`, `rules`, and `jev` strategies and reports
+per-task success, provider input-token difference from baseline, and whatever
+measured cost and latency the runner returns. The supplied runner must use a
+fresh, equivalent coding-agent environment for each invocation and implement
+the baseline and simple rule strategy. This comparison contract is tested;
+no three-way coding-task success or cost results are claimed here.
 
 Run the same model once across three realistic repository reads:
 
