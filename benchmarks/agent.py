@@ -178,7 +178,7 @@ class RunMetrics:
             "prune_reasons": dict(self.prune_reasons),
             "compaction_reasons": dict(self.compaction_reasons),
             **{
-                key: self.usage.get(key, 0)
+                key: None if self.usage.get("_missing") else self.usage.get(key)
                 for key in (
                     "input_tokens",
                     "cached_input_tokens",
@@ -535,7 +535,10 @@ def http_solver(
             "input": response_input(messages),
         }
         data = _post(f"{url}/responses", key, payload, max(5, min(int(remaining), 180)))
-        for metric, value in _usage(data).items():
+        measured = _usage(data)
+        if not measured:
+            usage["_missing"] = 1
+        for metric, value in measured.items():
             usage[metric] = usage.get(metric, 0) + value
         output = data.get("output")
         if not isinstance(output, list):
@@ -582,9 +585,22 @@ def _arguments(raw: Any) -> dict[str, Any]:
 
 def _usage(data: Mapping[str, Any]) -> dict[str, int]:
     raw_usage = data.get("usage")
-    usage: dict[str, Any] = raw_usage if isinstance(raw_usage, dict) else {}
-    prompt = _positive(usage.get("input_tokens", usage.get("prompt_tokens")))
-    completion = _positive(usage.get("output_tokens", usage.get("completion_tokens")))
+    if not isinstance(raw_usage, dict):
+        return {}
+    usage: dict[str, Any] = raw_usage
+    raw_prompt = usage.get("input_tokens", usage.get("prompt_tokens"))
+    raw_completion = usage.get("output_tokens", usage.get("completion_tokens"))
+    if (
+        isinstance(raw_prompt, bool)
+        or not isinstance(raw_prompt, int)
+        or raw_prompt < 0
+        or isinstance(raw_completion, bool)
+        or not isinstance(raw_completion, int)
+        or raw_completion < 0
+    ):
+        return {}
+    prompt = raw_prompt
+    completion = raw_completion
     details = usage.get("input_tokens_details")
     if not isinstance(details, dict):
         details = usage.get("prompt_tokens_details")

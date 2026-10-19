@@ -567,8 +567,10 @@ def test_comma_formats_values() -> None:
     assert comma("0.01") == "0.01"
 
 
-def test_metrics_default_to_zero_not_none() -> None:
+def test_metrics_distinguish_missing_provider_usage_from_zero() -> None:
     payload = RunMetrics().to_dict()
-    assert payload["input_tokens"] == 0
+    assert payload["input_tokens"] is None
+    partial = RunMetrics(usage={"input_tokens": 50, "_missing": 1}).to_dict()
+    assert partial["input_tokens"] is None
     assert payload["tool_output_reduction_percent"] == 0.0
     assert payload["jev_cost"] == "0"

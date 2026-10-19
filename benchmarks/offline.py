@@ -185,6 +185,18 @@ def run(output: Path) -> dict[str, Any]:
         row = metrics.to_dict()
         row.update(
             {
+                key: 0
+                for key in (
+                    "input_tokens",
+                    "cached_input_tokens",
+                    "uncached_input_tokens",
+                    "output_tokens",
+                    "total_tokens",
+                )
+            }
+        )
+        row.update(
+            {
                 "case": "offline-parse-amount",
                 "trial": 0,
                 "condition": condition,
