@@ -2,8 +2,8 @@
 
 No coding model and no Jev gateway: a scripted solver replays a fixed tool
 sequence against a synthetic repository, and a local judge answers the same
-relevance questions Jev would. This measures the ContextLens layers and the
-report plumbing, not a coding model. It never makes a network request.
+relevance questions Jev would. This measures live filtering and report
+plumbing, not a coding model. It never makes a network request.
 
     python -m benchmarks.offline --output benchmarks/results/offline.json
 """
@@ -24,7 +24,6 @@ from typing import Any
 
 from benchmarks.agent import CONDITIONS, Answer, ToolCall, run_agent
 from benchmarks.report import analyze, markdown
-from contextlens.compaction import CompactionConfig
 from contextlens.filtering import PruneConfig, protected_line
 from contextlens.jev import Evaluation
 from contextlens.models import Message
@@ -180,12 +179,6 @@ def run(output: Path) -> dict[str, Any]:
             solver=scripted_solver(),
             judge=LocalJudge("parse_amount"),
             prune_config=PruneConfig(minimum_tokens=600, chunk_lines=20),
-            # The trigger is deliberately low: after live pruning this small
-            # scripted transcript would never reach a production threshold, and
-            # the point of the offline check is to exercise both layers.
-            compaction_config=CompactionConfig(
-                trigger_tokens=500, preserve_recent_messages=4
-            ),
             max_turns=len(SCRIPT) + 2,
             timeout=600,
         )
@@ -213,7 +206,7 @@ def run(output: Path) -> dict[str, Any]:
             "No coding model and no Jev gateway. A scripted solver replays one "
             "fixed tool sequence and a local heuristic answers the relevance "
             "questions. Coding-model token columns are zero because no coding "
-            "model ran. This measures the ContextLens layers and the report, "
+            "model ran. This measures live filtering and the report, "
             "not task success or frontier-model savings."
         ),
         "tasks": [{"case_id": "offline-parse-amount"}],
