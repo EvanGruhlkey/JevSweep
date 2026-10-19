@@ -294,8 +294,7 @@ def questions_for(interaction: ToolInteraction) -> dict[str, Any]:
             "matters for what the agent does next.",
             keep="The call records a decision, a constraint, or an attempt the "
             "agent still needs to know about.",
-            drop="The agent would behave identically without any record of "
-            "this call.",
+            drop="The agent would behave identically without any record of this call.",
         ),
         f"result_{interaction.id}": boolean_question(
             f"The full output of tool call {interaction.id} "
@@ -397,20 +396,31 @@ def apply_decisions(
         uses = tuple(
             use
             for use in message.tool_uses
-            if actions.get(use.tool_use_id) != "drop"
+            if actions.get(use.tool_use_id) != "drop" or receipts is not None
         )
         results = tuple(
             _rewrite_result(result, config, receipts)
             if actions.get(result.tool_use_id) == "truncate"
+            else _drop_result(result, receipts)
+            if actions.get(result.tool_use_id) == "drop" and receipts is not None
             else result
             for result in message.tool_results
-            if actions.get(result.tool_use_id) != "drop"
+            if actions.get(result.tool_use_id) != "drop" or receipts is not None
         )
         candidate = replace(message, tool_uses=uses, tool_results=results)
         if candidate.empty:
             continue
         rebuilt.append(candidate)
     return tuple(rebuilt)
+
+
+def _drop_result(result: ToolResult, receipts: ReceiptStore) -> ToolResult:
+    receipt_id = result.receipt_id or receipts.save(result.text).receipt_id
+    return replace(
+        result,
+        text=f"[contextlens compacted; recover {receipt_id}]",
+        receipt_id=receipt_id,
+    )
 
 
 def _rewrite_result(
@@ -488,9 +498,7 @@ def fit_state(
             label = "full" if stage == 0 else f"arguments<={argument_chars}"
             return state_of(history), size, label
 
-    order = sorted(
-        range(len(history)), key=lambda at: history[at]["i"] in protected
-    )
+    order = sorted(range(len(history)), key=lambda at: history[at]["i"] in protected)
     for at in order:
         entry = history[at]
         if len(entry["text"]) <= TEXT_HEAD + TEXT_TAIL + 40:
@@ -587,6 +595,8 @@ def compact_transcript(
     candidates = [item for item in interactions if not item.pinned]
     if not candidates:
         return unchanged("nothing_eligible")
+    if receipts is None:
+        return unchanged("no_receipt_store")
     state, state_tokens, stage = fit_state(
         messages, interactions, config, task.strip() or task_from(messages)
     )
@@ -617,8 +627,7 @@ def compact_transcript(
         except JevError:
             return unchanged("jev_unavailable")
     decisions = tuple(
-        decide(item, *answers.get(item.id, (1.0, 1.0)), config)
-        for item in interactions
+        decide(item, *answers.get(item.id, (1.0, 1.0)), config) for item in interactions
     )
     rebuilt = apply_decisions(messages, decisions, interactions, config, receipts)
     tokens_after = transcript_tokens(rebuilt)
@@ -648,9 +657,7 @@ def compact_transcript(
     )
 
 
-def _without(
-    history: list[dict[str, Any]], left_out: set[int]
-) -> list[dict[str, Any]]:
+def _without(history: list[dict[str, Any]], left_out: set[int]) -> list[dict[str, Any]]:
     return [item for at, item in enumerate(history) if at not in left_out]
 
 

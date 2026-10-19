@@ -93,6 +93,17 @@ def test_split_chunks_breaks_up_very_long_lines() -> None:
     assert all(len(chunk.text) <= 2_000 for chunk in chunks)
 
 
+def test_pruning_passes_through_long_line_without_rewriting_it(tmp_path: Path) -> None:
+    output = "x" * 9_000
+    receipts = ReceiptStore(tmp_path)
+    outcome = OutputPruner(
+        receipts, judge=FakeJudge(0.0), config=PruneConfig(minimum_tokens=0)
+    ).prune(PruneRequest(task="fix bug", output=output, tool="read_file"))
+    assert outcome.text == output
+    assert outcome.reason == "long_line"
+    assert receipts.read(outcome.receipt_id) == output
+
+
 def test_binary_detection() -> None:
     assert looks_binary("abc\x00def")
     assert looks_binary("\x01\x02\x03\x04\x05")
@@ -226,9 +237,9 @@ def test_uncertainty_floor_is_opt_in(tmp_path: Path) -> None:
         PruneRequest(task="t", output=noise(), tool="shell")
     )
     assert default.pruned
-    guarded = pruner(
-        tmp_path, FakeJudge(0.2), uncertain_keep_probability=0.1
-    ).prune(PruneRequest(task="t", output=noise(), tool="shell"))
+    guarded = pruner(tmp_path, FakeJudge(0.2), uncertain_keep_probability=0.1).prune(
+        PruneRequest(task="t", output=noise(), tool="shell")
+    )
     assert not guarded.pruned
     assert guarded.reason == "kept_all"
 
@@ -319,9 +330,9 @@ def test_chunks_that_cannot_fit_beside_the_task_are_left_unscored(
 
 def test_output_that_cannot_be_scored_at_all_passes_through(tmp_path: Path) -> None:
     judge = FakeJudge(0.0)
-    outcome = pruner(
-        tmp_path, judge, chunk_lines=200, max_state_tokens=260
-    ).prune(PruneRequest(task="t", output=noise(2000), tool="shell"))
+    outcome = pruner(tmp_path, judge, chunk_lines=200, max_state_tokens=260).prune(
+        PruneRequest(task="t", output=noise(2000), tool="shell")
+    )
     assert judge.states == []
     assert outcome.reason == "no_scoring_capacity"
     assert outcome.text == noise(2000)
@@ -331,9 +342,9 @@ def test_one_state_is_reused_across_several_batched_requests(
     tmp_path: Path,
 ) -> None:
     judge = FakeJudge(0.0)
-    pruner(
-        tmp_path, judge, max_state_tokens=25_000, max_request_tokens=4_100
-    ).prune(PruneRequest(task="t", output=noise(300), tool="shell"))
+    pruner(tmp_path, judge, max_state_tokens=25_000, max_request_tokens=4_100).prune(
+        PruneRequest(task="t", output=noise(300), tool="shell")
+    )
     assert len(judge.batches) > 1
     assert all(judge.states[0] == state for state in judge.states)
     assert max(len(batch) for batch in judge.batches) < 15
