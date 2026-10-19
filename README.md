@@ -4,7 +4,7 @@
 
 ## How it works
 
-1. **Capture.** A Claude Code hook or explicitly invoked Codex wrapper captures a tool result before the coding model reads it.
+1. **Capture.** After installation, a Claude Code hook runs on each supported tool result. Codex filters commands that its agent runs through the installed wrapper.
 2. **Protect.** JevSweep saves the exact original locally, then keeps errors, test failures, exit status, important results, and uncertain chunks.
 3. **Score.** Large eligible output is split into chunks. Jev scores their relevance to the current coding task; small and unsuitable output skips Jev.
 4. **Deliver.** Low-value chunks become receipt markers. `contextlens recover RECEIPT_ID` restores the original. If Jev fails, the original passes through.
@@ -20,7 +20,7 @@ flowchart LR
   F --> M[Coding model]
 ```
 
-Claude Code uses a `PostToolUse` hook for successful Bash stdout. Codex uses the same engine through `jevsweep-run`; **direct Codex commands are not intercepted**. Jev does not write code or choose the agent's next action.
+Claude Code uses a `PostToolUse` hook for successful Bash stdout and reads the current task from its session transcript. Nothing needs to stay running in the background. Codex uses the same engine through `jevsweep-run`; **direct Codex commands are not intercepted**. Jev does not write code or choose the agent's next action.
 
 ## Results
 
@@ -39,18 +39,17 @@ Claude Code:
 
 ```bash
 jevsweep-install claude --path /path/to/project
-export JEVSWEEP_TASK="fix the failing parser test"
 cd /path/to/project && claude
 ```
 
-Codex (invoke `$jevsweep` or wrap a verbose command explicitly):
+Codex (the installed skill guides wrapper use, but automatic interception is not supported):
 
 ```bash
 jevsweep-install codex --path /path/to/project
-jevsweep-run --task "fix the failing parser test" -- rg parser src tests
+cd /path/to/project && codex
 ```
 
-On PowerShell, set the task with `$env:JEVSWEEP_TASK = "fix the failing parser test"`. Receipts default to `.contextlens/receipts`.
+The user does not need to supply `--task`: the Claude hook reads recent user requests, and the Codex agent supplies the task when it invokes the wrapper. If Claude cannot read a task, it returns the original output. Receipts default to `.contextlens/receipts`.
 
 The ten-issue paired benchmark runs a separate coding agent and requires `OPENAI_API_KEY` as well as `AI_GATEWAY_API_KEY`; normal Claude Code and Codex use do not require an OpenAI API key:
 
