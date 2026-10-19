@@ -1,263 +1,220 @@
-# JevSweep (ContextLens package)
+<h1 align="center">JevSweep</h1>
 
-ContextLens turns the current coding task into a goal question, asks the
-released SWE-Pruner 0.6B model which source lines matter, then restores the
-Python structure needed to use them. Every original is recoverable.
+<p align="center"><b>Give coding agents less to read.</b><br>
+JevSweep uses Jev to remove low-value tool output before it reaches the coding model, while keeping every removed result exactly recoverable.</p>
 
-The package name and CLI remain `contextlens`. The scoring model is the
-released `ayanami-kitasan/code-pruner` checkpoint (Jev); it scores relevance
-only. The host coding agent chooses all tools and actions.
 
-## Integrate at the tool boundary
+<p align="center">
+<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/45246829-5aba-49a4-b08a-7da80992b48c" />
 
-Install the wrapper in the agent host's tool dispatcher, before the returned
-text is appended to model context. The agent does not call a pruning tool.
+</p>
 
-```python
-from pathlib import Path
-from contextlens.pruning import ContextPruner, LocalSwePrunerScorer, PruningSession, ReceiptStore
-from contextlens.pruning.middleware import ToolResultMiddleware
+## How it works
 
-store = ReceiptStore(Path(".contextlens/receipts"))
-session = PruningSession(ContextPruner(LocalSwePrunerScorer(), store),
-                         "Fix the refresh-token timeout")
-middleware = ToolResultMiddleware(session)
+1. **Capture.** When the agent runs a tool like `grep`, `read_file`, or a shell command, JevSweep stores the original result before changing anything.
 
-# Register this callable instead of the original read_file callable.
-agent_tools["read_file"] = middleware.wrap(read_file, "read_file")
-```
+2. **Protect.** Errors, tracebacks, test results, exit statuses, structured output, and other important context are kept automatically.
 
-`wrap` accepts a synchronous, keyword-argument tool callable returning plain
-text. Nontext results, writes, search results, unsupported languages, short
-reads, errors, test output, and diffs pass through. The default gate only
-calls Jev when a read has at least twice the minimum expected savings (512
-estimated tokens), and only returns a pruning result when it saves that much.
-The estimate uses UTF-8 bytes divided by four; provider token usage may differ.
-Any middleware or scoring error sends the original result. Model latency and
-cost are therefore incurred only for eligible reads; the gate is a heuristic,
-not a measured break-even guarantee.
+3. **Score.** The remaining output is split into chunks. Jev scores whether each chunk still matters to the current task.
 
-For long sessions, call `compact_transcript(messages, store)` from
-`contextlens.pruning.transcript` before constructing a model request. It
-replaces older ordinary tool messages with receipt markers, keeps recent
-messages and state-changing or diagnostic output, and retains message order.
-`recover_message(marker_message, store)` restores the complete original
-message. The host must expose receipt recovery to its agent if the agent
-needs to revisit omitted content.
+4. **Prune.** Low-value chunks are removed before the coding model sees them. Each removed section points back to a receipt containing the exact original text.
 
-## See it
 
-```python
-# input: client.py
-from transport import BaseTransport
-from metrics import record_request
+JevSweep also includes transcript compaction for longer sessions. Old tool calls can be kept, shortened, or removed based on whether they still matter.
 
-class Client(BaseTransport):
-    def refresh_token(self, retry):
-        record_request("refresh")
-        if retry.enabled:
-            return self.post("/token", timeout=retry.timeout)
-        return self.post("/token")
+Nothing is summarized or rewritten.
 
-def unrelated_report():
-    ...
-```
+## System design
 
-```bash
-contextlens prune \
-  --task "Fix the refresh-token timeout" \
-  --input client.py
-```
-
-```python
-from transport import BaseTransport
-# [ContextLens cl_0123456789abcdef01234567 omitted original lines 3-4]
-
-class Client(BaseTransport):
-    def refresh_token(self, retry):
-        # [ContextLens cl_0123456789abcdef01234567 omitted original lines 7-7]
-        if retry.enabled:
-            return self.post("/token", timeout=retry.timeout)
-        return self.post("/token")
-# [ContextLens cl_0123456789abcdef01234567 omitted original lines 11-13]
-```
-
-The JSON result records the generated goal and why each line survived.
-
-## Architecture
-
-### 1. Create a goal for every read
-
-Following [SWE-Pruner](https://arxiv.org/abs/2601.16746), ContextLens sits
-between read tools and the agent.
+Jev only makes relevance decisions. It does not write code, choose tools, execute commands, or control the agent.
 
 ```mermaid
 flowchart LR
-    A[Current coding task] --> B[Goal question]
-    C[Current focus] --> B
-    D[File path] --> B
+    A["Coding agent"] --> B["Tool call"]
+    B --> C["Raw result"]
+    C --> D["JevSweep"]
+    D --> E["Jev relevance scoring"]
+    E --> F["Smaller result"]
+    F --> A
+
+    C -. exact original .-> R["Receipt store"]
+    R -. recover .-> A
 ```
 
-### 2. Let the 0.6B skimmer choose evidence
+For live pruning, JevSweep keeps the beginning and end of an observation and automatically protects chunks containing signals such as errors, warnings, tracebacks, test totals, exit statuses, and artifact paths.
 
-Following [SWE-Pruner](https://arxiv.org/abs/2601.16746), the goal and source
-are encoded together. Token scores are averaged by line and thresholded.
+Structured documents such as valid JSON and unified diffs pass through unchanged rather than being partially cut.
 
-```mermaid
-flowchart LR
-    A[Goal + source] --> B[0.6B neural skimmer]
-    B --> C[Token scores]
-    C --> D[Line averages]
-    D --> E[Evidence lines]
+If Jev fails, returns an invalid response, or the reduction is too small to be useful, the original result passes through untouched.
+
+## Results
+
+I tested live pruning on 10 real Python GitHub issues from Click, Responses, Luigi, AWS Lambda Powertools, Flask, and Babel.
+
+The baseline and JevSweep used the same coding model, issue prompts, repository commits, tools, turn limits, and hidden graders.
+
+| | Baseline | JevSweep |
+|---|---:|---:|
+| Verified fixes | 5 / 10 | **5 / 10** |
+| Tool output sent to model | 60,844 | **38,791** |
+| Uncached model input | 69,094 | **51,955** |
+| Coding-model input | 622,586 | **435,221** |
+| Total coding-model tokens | 641,288 | **454,816** |
+| Agent turns | 137 | **137** |
+| Tool calls | 129 | **127** |
+
+JevSweep cut the amount of tool output sent to the coding model by **36.2%** while matching the baseline at **5/10 verified fixes**.
+
+Uncached coding-model input fell **24.8%**.
+
+Total coding-model token usage was **29.1% lower** in this run, although total input is more sensitive to differences in agent trajectories than the direct tool-output measurement.
+
+Full results: [`benchmarks/results/four-condition-2026-09-21-tuned.md`](benchmarks/results/four-condition-2026-09-21-tuned.md).
+
+## What got pruned
+
+Across the live-pruning benchmark, JevSweep processed 204 tool results.
+
+- 103 were below the size threshold and passed through
+- 33 did not have enough chunks to prune
+- 33 were scored and kept in full
+- **22 were pruned**
+- 7 hit gateway failures and failed open
+- 6 were structured documents and were intentionally skipped
+
+The agent made **zero recovery requests** for removed context during the benchmark.
+
+## Transcript compaction
+
+Live pruning reduces new context as it enters the agent.
+
+Transcript compaction handles context that has already accumulated.
+
+Once a transcript becomes large enough, old tool calls are converted into compact descriptors containing information such as the tool name, arguments, result status, output size, preview, and age.
+
+Jev then decides whether each old result should be:
+
+```text
+KEEP       keep the full result
+TRUNCATE   keep the call and a short part of the result
+DROP       remove the old call and result
 ```
 
-### 3. Restore structural support
+Jev only sees the compact descriptors, not every full historical result.
 
-[LaMR](https://arxiv.org/abs/2605.15315) shows why semantic evidence needs
-dependency closure. ContextLens traces those dependencies with the Python AST.
+The production compaction threshold is currently 20,000 estimated transcript tokens.
 
-```mermaid
-flowchart LR
-    A[Evidence lines] --> B[Imports + definitions]
-    A --> C[Scopes + control flow]
-    B --> D[Source skeleton]
-    C --> D
+The real GitHub benchmark never reached that threshold, so the results above measure **live pruning only**. Transcript compaction is implemented and tested separately but still needs a longer real-agent evaluation.
+
+## Recoverability
+
+Every raw result is stored before pruning.
+
+When context is removed, JevSweep inserts a receipt handle pointing back to the exact original text.
+
+```text
+[lines 240-410 omitted: cl_RECEIPT_ID]
 ```
 
-### 4. Validate or fall back
-
-```mermaid
-flowchart LR
-    A[Source skeleton] --> B{Parses and saves tokens?}
-    B -- Yes --> C[Send to agent]
-    B -- No --> D[Send original]
-```
-
-Small, unsupported, invalid, and non-saving results pass through unchanged.
-Today, pruning handles Python source; other observation types are classified
-but bypassed.
-
-## Install
-
-Requires Python 3.12+. Installation includes the official SWE-Pruner runtime
-and PyTorch.
+The agent or user can recover it later:
 
 ```bash
-python -m pip install -e ".[dev]"
+contextlens recover cl_RECEIPT_ID \
+  --receipts .contextlens/receipts
 ```
 
-The default model is `ayanami-kitasan/code-pruner`. The first prune downloads
-its 1,345,835,359-byte checkpoint from Hugging Face. Local inference requires
-CUDA by default. Pin a local copy with:
+Pruning therefore changes what the coding model sees by default without destroying the underlying observation.
+
+## Run it
+
+Python 3.12+.
 
 ```bash
-hf download ayanami-kitasan/code-pruner --local-dir .contextlens/models/pruner
-contextlens prune --model .contextlens/models/pruner \
-  --task "Fix the refresh-token timeout" --input client.py
+python -m pip install -e .
 ```
 
-An existing SWE-Pruner server remains supported:
+Set a Vercel AI Gateway key for Jev:
 
 ```bash
-contextlens prune --backend http \
-  --backend-url http://127.0.0.1:8000/prune \
-  --task "Fix the refresh-token timeout" --input client.py
+export AI_GATEWAY_API_KEY="..."
 ```
 
-CPU inference is available only as an explicit `--allow-cpu` opt-in because
-the upstream runtime pads inference to 8,192 tokens.
-
-Narrow the query as the agent's focus changes:
+Prune command output:
 
 ```bash
-contextlens prune \
-  --task "Fix the refresh-token timeout" \
-  --focus "Trace retry options passed to the request" \
-  --tool read_file \
-  --argument path=client.py \
-  --input client.py \
+pytest -q 2>&1 | contextlens prune \
+  --task "fix the failing parser test" \
+  --tool shell
+```
+
+Compact an existing transcript:
+
+```bash
+contextlens compact \
+  --transcript transcript.json \
   --json
 ```
 
-JSON includes line-level reasons, omitted ranges, token reduction, backend,
-latency, and receipt ID.
-
-## Recover
+Recover removed context:
 
 ```bash
-# complete observation
-contextlens recover cl_0123456789abcdef01234567
-
-# selected original lines
-contextlens recover cl_0123456789abcdef01234567 \
-  --start-line 80 --end-line 130
+contextlens recover cl_RECEIPT_ID \
+  --receipts .contextlens/receipts
 ```
 
-Receipts live in `.contextlens/receipts` by default. Files are read and written
-without newline translation, so recovery preserves CRLF and long lines exactly.
-
-## Serve
+Run JevSweep over MCP:
 
 ```bash
-contextlens serve --host 127.0.0.1 --port 8765
+contextlens mcp \
+  --task "fix the failing parser test" \
+  --receipts .contextlens/receipts
 ```
 
-```text
-GET  /health
-POST /v1/prune
-POST /v1/recover
-```
+Without a Jev gateway key, pruning and compaction fail open and return the original context.
 
-The server binds to loopback by default and caps request bodies at 16 MiB.
+## Benchmark it
 
-## Benchmark
-
-`contextlens.pruning.comparison.compare_strategies(tasks, run)` invokes the
-same task list with `baseline`, `rules`, and `jev` strategies and reports
-per-task success, provider input-token difference from baseline, and whatever
-measured cost and latency the runner returns. The supplied runner must use a
-fresh, equivalent coding-agent environment for each invocation and implement
-the baseline and simple rule strategy. This comparison contract is tested;
-no three-way coding-task success or cost results are claimed here.
-
-Run the same model once across three realistic repository reads:
+The paired benchmark runs the same frozen coding tasks under multiple context conditions.
 
 ```bash
-python benchmarks/pruning_runtime.py
+export OPENAI_API_KEY="..."
+export AI_GATEWAY_API_KEY="..."
+
+python -m pip install uv
+
+python -m benchmarks.run \
+  --output benchmarks/artifacts/paired \
+  --trials 1 \
+  --timeout 300
 ```
 
-The harness measures per-case wall time and token reduction, parses every
-result, and verifies byte-exact receipt recovery. It reports JSON and keeps the
-model warm between cases.
+The benchmark uses frozen real GitHub issues and hidden graders so the context layer changes without changing the task itself.
 
-### CPU smoke test
-
-Observed September 3, 2026 on Windows 11, Python 3.14.5, PyTorch 2.14,
-Intel i7-13700H, 15.6 GB RAM, and no CUDA:
-
-| Check | Result |
-| --- | --- |
-| Clean editable install | Pass |
-| Checkpoint download with `hf-xet` | Pass |
-| Cached checkpoint size | 1,345,835,359 bytes |
-| First real repository read | Stopped after 8 minutes |
-| Memory observed during inference | 6.0 GB resident; 14.8 GB private |
-
-No token-reduction number is claimed for that incomplete run. Use a CUDA host
-or `--backend http` for real agent traffic. To reproduce the CPU result
-despite the warning, pass `--allow-cpu`.
-
-## Develop
+An offline harness is also included for testing the pruning and compaction paths without calling a coding model:
 
 ```bash
-python -m pytest -q
-ruff check src tests
-mypy
+python -m benchmarks.offline \
+  --output benchmarks/results/offline.json
 ```
 
-Method references: [SWE-Pruner](https://arxiv.org/abs/2601.16746) and
-[LaMR](https://arxiv.org/abs/2605.15315). ContextLens loads the released
-SWE-Pruner checkpoint; LaMR-style dependency support is deterministic until a
-compatible multi-rubric checkpoint is released.
+## Repository
+
+| Folder | What's in it |
+|---|---|
+| [`src/contextlens/`](src/contextlens/) | live pruning, transcript compaction, Jev client, receipts, CLI, MCP |
+| [`benchmarks/`](benchmarks/) | frozen GitHub tasks and paired evaluation harness |
+| [`tests/`](tests/) | pruning, compaction, recovery, CLI, MCP, and benchmark tests |
+| [`docs/`](docs/) | architecture and experiment history |
+| [`experiments/`](experiments/) | retired approaches |
+
+## Credits
+
+Live tool-output pruning is based on Tamara Tran's [`jev-pruner`](https://github.com/tamaratran/jev-pruner).
+
+Transcript compaction builds on [`fast-jev-compaction`](https://github.com/tamaratran/fast-jev-compaction).
+
+Jev is built by [TypeSafe AI](https://www.typesafe.ai) and accessed through the [Vercel AI Gateway](https://vercel.com/ai-gateway/models/jev).
+
+Benchmark tasks come from [Click](https://github.com/pallets/click), [Responses](https://github.com/getsentry/responses), [Luigi](https://github.com/spotify/luigi), [AWS Lambda Powertools](https://github.com/aws-powertools/powertools-lambda-python), [Flask](https://github.com/pallets/flask), and [Babel](https://github.com/python-babel/babel), including two tasks from [SWE-bench-Live](https://github.com/SWE-bench/SWE-bench-Live).
 
 Released under the [MIT License](LICENSE).

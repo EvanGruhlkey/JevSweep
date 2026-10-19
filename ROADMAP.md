@@ -1,78 +1,54 @@
 # ContextLens roadmap
 
-ContextLens is becoming a runtime observation pruner for coding tasks. The
-primary outcome is lower end-to-end input volume without reducing task success.
+The goal is fewer coding-model input tokens per verified fix, with no extra
+agent turns and no drop in task success.
 
 ## Product rules
 
-- Condition every selection on the current task or narrower runtime focus.
-- Keep semantic evidence and structural support as separate signals.
-- Preserve exact originals and make every omission recoverable.
-- Fail open when scoring, parsing, validation, or recovery is uncertain.
-- Measure complete task trajectories, not isolated prompt size.
-- Add a format only after its dependency rules have task-level tests.
+- Reduce context on the tool-response path and on the host's own transcript.
+  Never spend a frontier-model turn deciding what to keep.
+- Use Jev only for closed-form relevance questions over content the agent
+  already discovered. Jev does not choose actions, write code, run tools, plan,
+  or summarize.
+- Never rewrite or synthesize. Keep verbatim, truncate to a bounded prefix, or
+  remove.
+- Keep every omission exactly recoverable behind a stable handle.
+- Fail open when scoring, validation, or fitting is uncertain.
+- Measure complete task trajectories. Never mix Jev tokens into the
+  coding-model input metric.
 
-## Implemented foundation
+## Shipped
 
-- Stable request, result, reason, and omission-range contracts.
-- SWE-Pruner-compatible HTTP semantic scoring adapter.
-- Python AST dependency closure for imports, definitions, scopes, decorators,
-  control flow, and bounded symbol hops.
-- Parseable skeleton rendering with line-range markers.
-- Content-addressed local receipts and exact range recovery.
-- Command-line and local HTTP entry points.
-- Reduction, latency, backend, bypass, and kept-line telemetry.
+- Live tool-output pruning: chunking, deterministic protection of diagnostics
+  and results, batched Jev KEEP/DROP, bounded state, receipts for everything
+  omitted.
+- Transcript compaction: descriptor-based KEEP/TRUNCATE/DROP over old tool
+  interactions, with the task, recent messages, edits, recent failures, and
+  pinned content protected.
+- A `prune` / `compact` / `recover` CLI and a two-tool MCP server.
+- A paired coding-agent benchmark with baseline, live pruning, and live pruning
+  plus compaction over ten frozen real GitHub issues, and an offline harness
+  check that needs no credentials.
 
-## Next: adaptive retention
+## Next
 
-- Replace the fixed semantic threshold with a query-adaptive gate.
-- Calibrate semantic evidence and dependency support independently.
-- Add a budget controller that expands or contracts around structural risk.
-- Distinguish complete definition retention from lightweight interface views.
-- Add explicit confidence and repair-cost fields to every decision.
+1. Measure transcript compaction. It has never fired in a real run: the longest
+   transcript on the benchmark reached 14,178 tokens against its 20,000-token
+   trigger. It needs sessions long enough to reach that, or a trigger chosen from
+   evidence rather than intuition.
+2. Keep a mechanically inert control condition in every run. On the 21 September
+   run `compaction_only` did nothing and still showed -22.7% total coding-model
+   input, which is the only honest way to see this suite's noise floor.
+3. Cut live pruning's latency. It cost 20.0% more wall clock because every large
+   observation waits on Jev.
+4. Reduce the share of observations that fall below the size gate. 103 of 204
+   were ineligible; smaller eligible outputs may still be worth chunking.
+5. Report recovery rate as a quality signal: frequent recovery means pruning is
+   too aggressive. It was zero across every measured run so far.
 
-## Next: more observation shapes
+## Explicitly out of scope
 
-- Search results: retain matching hits plus file, symbol, and result-group headers.
-- Tracebacks and logs: retain causal chains, exception boundaries, and local time
-  windows while collapsing repeated frames and noise.
-- JSON: retain matching leaves plus ancestor keys, referenced identifiers, and
-  schema-critical siblings.
-- Plain text: use semantic spans with headings, list boundaries, and local windows.
-- Add JavaScript and TypeScript parsing after Python behavior is calibrated.
-
-## Next: runtime integration
-
-- Add a middleware adapter around file reads and search observations.
-- Carry one task goal across a run while allowing a narrower focus per call.
-- Expose receipt-range recovery as a first-class tool.
-- Add deterministic caching keyed by task, focus, content, and configuration.
-- Add concurrency limits and backend health/circuit-breaker behavior.
-
-## Evaluation gates
-
-Every change must report:
-
-- total task success and mechanical evaluator results;
-- complete input and output volume across the run;
-- recovery calls and reread behavior;
-- pruning latency and backend failures;
-- retained-line precision by reason;
-- syntax and structural-repair failures; and
-- paired confidence intervals over repeated trials.
-
-The first release target is a Python coding-task suite with paired baseline and
-pruned runs. A default threshold ships only after it meets a no-regression gate
-across tasks and demonstrates net end-to-end reduction after recovery traffic.
-
-## Deliberately removed from the main product
-
-- repository instruction-file inventory and linting;
-- configuration minimization and patch generation;
-- provider-specific repository scope resolution;
-- repository-context CI verdicts; and
-- static savings claims that are not tied to task trajectories.
-
-Useful paired-runner, evaluator, artifact, redaction, and telemetry internals
-may be reused behind the new runtime path. They are implementation support, not
-the user-facing product.
+- Choosing the agent's next action, or any form of agent control.
+- LLM summarization of history.
+- Structural AST expansion in the default path. It measured badly; see
+  [`experiments/structural_expansion/`](experiments/structural_expansion/).

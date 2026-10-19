@@ -1,150 +1,119 @@
 # Architecture
 
-## Product boundary
-
-ContextLens is task-conditioned observation pruning for coding agents. It
-intercepts source returned by read tools, creates a goal question, uses the
-released SWE-Pruner 0.6B model to select evidence, restores structural support,
-and returns a smaller observation.
-
-It prunes environment observations, not conversation history. It is not a
-security filter or a replacement for tests.
-
-## Runtime loop
-
-```mermaid
-flowchart LR
-    A[Agent task] --> B[Read tool]
-    B --> C[Raw source]
-    C --> D[ContextLens]
-    D --> E[Focused source]
-    E --> A
-```
-
-`PruningSession` holds the stable task across a trajectory. Its focus may
-change between reads without changing task identity. Tool name, file path, and
-observation type travel with each request.
-
-## Goal creation
-
-SWE-Pruner asks the coding agent for a complete, self-contained question that
-describes its current information need. ContextLens creates that question
-deterministically so every integration gets the same contract:
+ContextLens sits between a coding agent's tools and the coding model. It
+reduces what the model has to read, and it does so without taking part in the
+agent's reasoning.
 
 ```text
-task:  Fix the refresh timeout
-focus: Trace retry options
-path:  src/client.py
-
-goal:  For the coding task 'Fix the refresh timeout', what code in
-       src/client.py is needed to answer: Trace retry options?
+Live pruning:         tool output -> Jev KEEP/DROP -> model
+Transcript compaction: old transcript -> Jev KEEP/TRUNCATE/DROP -> smaller transcript
 ```
 
-Without a narrower focus, the task itself becomes the information need. The
-generated goal is sent to the model and recorded in the result.
+## Boundary
 
-## Learned evidence selection
+Jev answers bounded relevance questions. It never chooses the agent's next
+action, writes code or commands, executes tools, plans, summarizes, or manages
+the agent loop. Neither layer spends a frontier-model turn on filtering: live
+pruning runs on the tool-response path, and compaction rewrites a transcript the
+host already owns.
 
-The default scorer lazy-loads `ayanami-kitasan/code-pruner`, the released
-SWE-Pruner checkpoint based on Qwen3-Reranker-0.6B.
+Every failure path returns the original text. A missing key, a gateway error,
+a malformed answer, a missing answer, a state that will not fit, or a reduction
+too small to be worth it all mean "unchanged".
 
-```mermaid
-flowchart LR
-    A[Goal + source] --> B[0.6B encoder]
-    B --> C[Token keep scores]
-    C --> D[Mean score per line]
-    D --> E[Threshold]
-    E --> F[Evidence lines]
-```
+Nothing is rewritten or synthesized. Content is kept verbatim, truncated to a
+bounded prefix plus metadata, or removed -- and what is removed stays exactly
+recoverable through a receipt handle.
 
-The official model runtime owns its prompt format, multi-layer feature fusion,
-CRF pruning head, 8,192-token window, overlapping chunks, and overlap-score
-averaging. ContextLens consumes its document score, model token count, and
-retained line numbers.
+## Modules
 
-The model loads on the first eligible observation. Small or unsupported
-observations do not allocate model memory. A lock serializes local inference so
-the HTTP service does not invoke one model concurrently. Local loading requires
-CUDA unless the caller explicitly accepts the upstream CPU path.
+| File | Responsibility |
+| --- | --- |
+| [`models.py`](../src/contextlens/models.py) | `Message`, `ToolUse`, `ToolResult`, `LineRange`, `OutputCategory`, token estimates |
+| [`jev.py`](../src/contextlens/jev.py) | The gateway, strict response validation, question construction, request batching, usage accounting |
+| [`receipts.py`](../src/contextlens/receipts.py) | Content-addressed store for originals; exact text or line-range recovery |
+| [`filtering.py`](../src/contextlens/filtering.py) | Live pruning of one tool result |
+| [`compaction.py`](../src/contextlens/compaction.py) | Relevance-based garbage collection over a transcript |
+| [`cli.py`](../src/contextlens/cli.py) | `prune`, `compact`, `recover`, `mcp` |
+| [`mcp.py`](../src/contextlens/mcp.py) | `context_prune` and `context_recover` over stdio |
 
-An explicit `--backend http` mode calls the same SWE-Pruner `/prune`
-contract out of process.
+`filtering.py` and `compaction.py` both depend on `models.py`, `jev.py`, and
+`receipts.py`, and on nothing else. They do not depend on each other. A host can
+use either alone.
 
-## Structural support
+## Live pruning
 
-SWE-Pruner supplies the semantic evidence mask. Following LaMR's
-semantic/dependency split, ContextLens computes a separate dependency layer
-from the Python AST.
+`OutputPruner.prune` takes one `PruneRequest` (task, raw output, tool name and
+arguments, optional focus) and returns a `PruneOutcome`.
 
-```mermaid
-flowchart TD
-    A[Evidence line] --> B[Complete statement]
-    A --> C[Enclosing scopes]
-    A --> D[Control-flow peers]
-    B --> E[Referenced definitions]
-    E --> F[Bounded dependency hops]
-```
+1. **Record.** The original is written to a receipt before anything else, so it
+   is recoverable even when pruning is skipped.
+2. **Gate.** Output below `minimum_tokens` passes through. So does binary
+   output, valid JSON, and unified diffs: cutting a hole in a machine-readable
+   document leaves something that still looks complete but is not.
+3. **Chunk.** Lines are grouped into chunks of `chunk_lines`, capped at 200
+   chunks, with lines over 2,000 characters split first. Fewer than three
+   chunks means there is nothing worth deciding.
+4. **Protect deterministically.** The first and last chunks always survive, as
+   does any chunk holding a recognized diagnostic or result -- errors,
+   warnings, tracebacks, test totals, exit status, artifact paths -- or sitting
+   next to one.
+5. **Ask.** One boolean question per remaining chunk: does any line in it still
+   matter for the task? The state carries the task, the focus, the tool call, a
+   category and its guidance, the distinct diagnostic lines from the whole
+   output, and the chunk texts. When the output is too large for one state it is
+   split into several states, each repeating the same context, so every decision
+   is made with the same task in view.
+6. **Keep on doubt.** A chunk stays when its probability reaches
+   `keep_threshold`, when it exceeds `uncertain_keep_probability` (0.1), or when
+   it was never scored. Removal requires confidence, not the absence of it.
+7. **Render.** Kept chunks are joined verbatim. Each run of dropped chunks
+   becomes one marker naming the omitted line range and the receipt handle. If
+   the result is not smaller, the original is returned.
 
-The closure restores:
+## Transcript compaction
 
-- complete multi-line statements;
-- decorators and class/function headers;
-- enclosing branch, loop, exception, match, and context-manager headers;
-- sibling `else`, `except`, `finally`, and `case` headers;
-- referenced imports, assignments, functions, and classes;
-- transitive definitions up to the configured hop limit.
+`compact_transcript` takes the transcript and returns a `CompactionResult`.
+Its design follows [`fast-jev-compaction`](https://github.com/tamaratran/fast-jev-compaction).
 
-This is the inference-time AST repair described by LaMR. ContextLens does not
-claim that the released SWE-Pruner checkpoint contains LaMR's unpublished
-semantic/dependency CRF heads. If a compatible backend returns independent
-rubric scores, the query-conditioned weight and each reason remain visible.
+1. **Trigger.** Below `trigger_tokens` nothing happens.
+2. **Pair.** Every `tool_use` is matched with its `tool_result` by
+   `tool_use_id`. A call without a result is not a candidate.
+3. **Protect.** Never touched: the first message (the original task), the newest
+   `preserve_recent_messages` messages, messages the host pinned (explicit user
+   constraints, recovered content), every edit -- a patch cannot be regenerated
+   from the transcript -- and failures inside twice the recent window.
+4. **Describe.** Jev sees a compact descriptor per interaction, never the result
+   itself: tool name, truncated arguments, success or failure, output size in
+   characters and lines, a short preview, and how many messages ago it
+   happened. The state holds the whole conversation in that form and shrinks in
+   stages until it fits `max_state_tokens`: arguments truncated to 600, then
+   200, then 60 characters; long message text abridged oldest-first; old
+   non-protected text collapsed to a note; old call-less messages left out.
+5. **Ask two questions per interaction.** Does the call still matter? Does its
+   full result still need to stay verbatim?
+6. **Decide deterministically.**
 
-## Rendering and fallback
+   | Condition | Action |
+   | --- | --- |
+   | pinned | `KEEP` |
+   | `keep_result >= keep_threshold` | `KEEP` the call and the full result |
+   | else `keep_call >= keep_threshold` | `TRUNCATE` to a bounded prefix plus a recovery note |
+   | else | `DROP` the call together with its result |
 
-```mermaid
-flowchart LR
-    A[Evidence + support] --> B[Source skeleton]
-    B --> C{Python parses?}
-    C -- No --> D[Original]
-    C -- Yes --> E{Actually smaller?}
-    E -- No --> D
-    E -- Yes --> F[Pruned result]
-```
+7. **Rebuild.** A dropped call disappears with its result, so no result is ever
+   orphaned. Untouched messages are returned as the same objects. Before a
+   result is truncated its full text goes to a receipt, and the truncation
+   marker names the handle.
+8. **Bail out.** If the pass removes less than `minimum_reduction` of the
+   transcript's tokens, the original transcript is kept.
 
-Omitted runs become comments containing the receipt ID and original line
-range. `pass` is inserted when omission would leave an empty suite. The
-rendered skeleton must parse and use fewer estimated tokens or the original is
-returned.
+## What was removed
 
-Scoring errors, invalid source, no selected lines, unsupported languages and
-observation kinds, and inputs below the minimum also fail open to the original.
-
-## Recovery and measurement
-
-The exact observation is saved before any model call under a
-content-addressed receipt. A caller can recover the whole observation or one
-line range.
-
-Each result reports:
-
-- generated goal and model backend;
-- retained lines with semantic, dependency, scope, control-flow, syntax, and
-  local-context reasons;
-- exact omitted ranges and receipt ID;
-- original, retained, and saved token estimates;
-- model/pipeline latency and bypass reason.
-
-`PruningSession.summary()` aggregates those measurements across the complete
-task trajectory.
-
-## Current limits
-
-The structural path supports Python source. Search output, logs, JSON, other
-languages, and plain text currently pass through. The released model requires
-Python 3.12+, PyTorch, CUDA for practical use, and 1,345,835,359 bytes of
-checkpoint storage. ContextLens installs `hf-xet` for the checkpoint's Xet
-transport; accelerator performance follows the upstream SWE-Pruner runtime.
-
-The repository still contains earlier context-evaluation modules for
-compatibility and research, but the installed `contextlens` command exposes
-the pruning runtime described here.
+The default path used to include deterministic Python AST expansion around
+whatever Jev kept. It measured badly and is now an experiment; see
+[`experiments/structural_expansion/`](../experiments/structural_expansion/).
+An action controller, bounded next-action routing, controller sessions, a
+repository evidence index, SWE-Pruner neural scoring, and a mandatory
+observation working set were removed outright. Their measurements are in
+[`history/`](history/).
