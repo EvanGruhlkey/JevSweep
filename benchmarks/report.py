@@ -212,7 +212,7 @@ def markdown(report: dict[str, Any]) -> str:
         "",
         "All conditions share the coding model, reasoning effort, issue "
         "prompt, repository commit, tool set, timeout, turn limit, and hidden "
-        "grader. The agent is never told that ContextLens exists. Jev tokens "
+        "grader. The agent is never told that JevSweep exists. Jev tokens "
         "are counted separately and never enter coding-model input.",
         "",
         "## Aggregate",
@@ -271,7 +271,7 @@ def markdown(report: dict[str, Any]) -> str:
 
 
 def _regressions(analysis: dict[str, Any]) -> list[str]:
-    """Tasks the baseline fixed and a ContextLens condition did not."""
+    """Tasks the baseline fixed and a JevSweep condition did not."""
 
     lines: list[str] = []
     total = 0
@@ -299,13 +299,13 @@ def _regressions(analysis: dict[str, Any]) -> list[str]:
         )
     elif baseline_passed == 0:
         lines.append(
-            "The baseline fixed no task, so there was nothing a ContextLens "
-            "condition could regress. This is not evidence that ContextLens "
+            "The baseline fixed no task, so there was nothing a JevSweep "
+            "condition could regress. This is not evidence that JevSweep "
             "preserves fixes."
         )
     elif total == 0:
         lines.append(
-            f"No ContextLens condition lost any of the {baseline_passed} fix(es) "
+            f"No JevSweep condition lost any of the {baseline_passed} fix(es) "
             "the baseline achieved."
         )
     return lines
@@ -329,7 +329,7 @@ def _notes(report: dict[str, Any], analysis: dict[str, Any]) -> list[str]:
             "`agent_unavailable` because neither `OPENAI_API_KEY` nor "
             "`AI_GATEWAY_API_KEY` was set. Every number below is a blocked "
             "run, not a measured result. Do not read any token figure, fix "
-            "count, or delta here as evidence about ContextLens.",
+            "count, or delta here as evidence about JevSweep.",
             "",
         ]
     elif analysis["any_agent_unavailable"]:
@@ -342,7 +342,7 @@ def _notes(report: dict[str, Any], analysis: dict[str, Any]) -> list[str]:
         notes += [
             "**Jev never scored** (`AI_GATEWAY_API_KEY` unset), so every "
             "candidate condition failed open to passthrough. Differences "
-            "between conditions are trajectory noise, not ContextLens.",
+            "between conditions are trajectory noise, not JevSweep.",
             "",
         ]
     if not analysis["complete"]:

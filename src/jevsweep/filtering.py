@@ -24,7 +24,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from contextlens.jev import (
+from jevsweep.jev import (
     DEFAULT_MAX_REQUEST_TOKENS,
     DEFAULT_MAX_STATE_TOKENS,
     JevError,
@@ -33,13 +33,13 @@ from contextlens.jev import (
     batch_questions,
     boolean_question,
 )
-from contextlens.models import (
+from jevsweep.models import (
     LineRange,
     OutputCategory,
     estimate_state_tokens,
     estimate_tokens,
 )
-from contextlens.receipts import ReceiptStore
+from jevsweep.receipts import ReceiptStore
 
 DEFAULT_MINIMUM_TOKENS = 256
 DEFAULT_MINIMUM_SAVINGS_TOKENS = 512
@@ -160,7 +160,7 @@ def protected_line(text: str) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class PruneConfig:
-    """Thresholds for live pruning. Override with ``CONTEXTLENS_*`` env vars."""
+    """Thresholds for live pruning. Override with ``JEVSWEEP_*`` env vars."""
 
     minimum_tokens: int = DEFAULT_MINIMUM_TOKENS
     minimum_savings_tokens: int = DEFAULT_MINIMUM_SAVINGS_TOKENS
@@ -190,21 +190,21 @@ class PruneConfig:
     @classmethod
     def from_env(cls) -> PruneConfig:
         return cls(
-            minimum_tokens=_env_int("CONTEXTLENS_MIN_TOKENS", DEFAULT_MINIMUM_TOKENS),
+            minimum_tokens=_env_int("JEVSWEEP_MIN_TOKENS", DEFAULT_MINIMUM_TOKENS),
             minimum_savings_tokens=_env_int(
-                "CONTEXTLENS_MIN_SAVINGS_TOKENS", DEFAULT_MINIMUM_SAVINGS_TOKENS
+                "JEVSWEEP_MIN_SAVINGS_TOKENS", DEFAULT_MINIMUM_SAVINGS_TOKENS
             ),
-            chunk_lines=_env_int("CONTEXTLENS_CHUNK_LINES", DEFAULT_CHUNK_LINES),
-            max_chunks=_env_int("CONTEXTLENS_MAX_CHUNKS", DEFAULT_MAX_CHUNKS),
+            chunk_lines=_env_int("JEVSWEEP_CHUNK_LINES", DEFAULT_CHUNK_LINES),
+            max_chunks=_env_int("JEVSWEEP_MAX_CHUNKS", DEFAULT_MAX_CHUNKS),
             keep_threshold=_env_float(
-                "CONTEXTLENS_KEEP_THRESHOLD", DEFAULT_KEEP_THRESHOLD
+                "JEVSWEEP_KEEP_THRESHOLD", DEFAULT_KEEP_THRESHOLD
             ),
             uncertain_keep_probability=_env_float(
-                "CONTEXTLENS_UNCERTAIN_KEEP_PROBABILITY",
+                "JEVSWEEP_UNCERTAIN_KEEP_PROBABILITY",
                 DEFAULT_UNCERTAIN_KEEP_PROBABILITY,
             ),
             max_state_tokens=_env_int(
-                "CONTEXTLENS_MAX_STATE_TOKENS", DEFAULT_MAX_STATE_TOKENS
+                "JEVSWEEP_MAX_STATE_TOKENS", DEFAULT_MAX_STATE_TOKENS
             ),
         )
 
@@ -674,7 +674,7 @@ def render(
         span = LineRange(run[0].start_line, run[-1].end_line)
         omitted.append(span)
         parts.append(
-            f"[contextlens omitted lines {span.start_line}-{span.end_line} "
+            f"[jevsweep omitted lines {span.start_line}-{span.end_line} "
             f"({span.line_count} lines); recover the full output with "
             f"receipt={receipt_id}]"
         )
@@ -705,7 +705,7 @@ def _split_long_lines(output: str) -> list[str]:
 
 
 def _gateway() -> Judge:
-    from contextlens.jev import JevGateway
+    from jevsweep.jev import JevGateway
 
     return JevGateway()
 

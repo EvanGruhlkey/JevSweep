@@ -1,2 +1,2 @@
-"""ContextLens deterministic benchmarks."""
+"""JevSweep deterministic benchmarks."""
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import re
 
-from contextlens.models import estimate_tokens
-from contextlens.receipts import ReceiptStore
+from jevsweep.models import estimate_tokens
+from jevsweep.receipts import ReceiptStore
 
 _PROGRESS = re.compile(r"^\s*(?:progress step \d+|\[\s*\d+%\])\s*$", re.I)
 
@@ -34,7 +34,7 @@ class RuleBasedPruner:
             line for index, line in enumerate(lines) if index not in removed
         )
         marker = (
-            f"[contextlens omitted {len(remove)} progress lines; "
+            f"[jevsweep omitted {len(remove)} progress lines; "
             f"receipt={receipt.receipt_id}]\n"
         )
         rendered = retained + marker

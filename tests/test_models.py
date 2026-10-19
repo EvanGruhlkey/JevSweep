@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from contextlens.models import (
+from jevsweep.models import (
     LineRange,
     Message,
     ToolResult,

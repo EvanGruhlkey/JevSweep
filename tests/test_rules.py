@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from contextlens.receipts import ReceiptStore
-from contextlens.rules import RuleBasedPruner
+from jevsweep.receipts import ReceiptStore
+from jevsweep.rules import RuleBasedPruner
 
 
 def test_rules_remove_only_repeated_progress_and_recover_exactly(

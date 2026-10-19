@@ -11,17 +11,17 @@ import json
 import sys
 from typing import Any, TextIO
 
-from contextlens.filtering import PruneConfig, PruneRequest, PruneSession
-from contextlens.jev import Judge
-from contextlens.receipts import ReceiptStore
+from jevsweep.filtering import PruneConfig, PruneRequest, PruneSession
+from jevsweep.jev import Judge
+from jevsweep.receipts import ReceiptStore
 
 PROTOCOLS = ("2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25")
 MAX_LINE_BYTES = 1024 * 1024
 INSTRUCTIONS = (
-    "ContextLens reduces large tool results before they reach the coding "
+    "JevSweep reduces large tool results before they reach the coding "
     "model. Send an oversized observation to context_prune and use "
     "context_recover with the receipt in an omission marker when you need the "
-    "omitted text. ContextLens only decides what is relevant; it does not "
+    "omitted text. JevSweep only decides what is relevant; it does not "
     "choose your next action."
 )
 
@@ -121,7 +121,7 @@ class Server:
         if not outcome.omitted_ranges:
             return outcome.text
         return (
-            f"{outcome.text}\n[contextlens kept {outcome.kept_chunks} of "
+            f"{outcome.text}\n[jevsweep kept {outcome.kept_chunks} of "
             f"{outcome.chunks} chunks; recover the full output with "
             f"context_recover {outcome.receipt_id}]"
         )
@@ -149,7 +149,7 @@ def dispatch(server: Server, message: Any) -> dict[str, Any] | None:
             if isinstance(version, str) and version in PROTOCOLS
             else PROTOCOLS[-1],
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "contextlens", "version": "0.2.0"},
+            "serverInfo": {"name": "jevsweep", "version": "0.2.0"},
             "instructions": INSTRUCTIONS,
         }
     elif method == "ping":

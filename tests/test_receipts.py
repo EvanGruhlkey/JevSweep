@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from contextlens.receipts import ReceiptStore
+from jevsweep.receipts import ReceiptStore
 
 
 def test_save_and_read_round_trips_exactly(tmp_path: Path) -> None:
     store = ReceiptStore(tmp_path)
     content = "line one\nline two\nline three\n"
     receipt = store.save(content, tool="shell", category="build")
-    assert receipt.receipt_id.startswith("cl_")
+    assert receipt.receipt_id.startswith("js_")
     assert receipt.line_count == 3
     assert receipt.char_count == len(content)
     assert store.read(receipt.receipt_id) == content
@@ -58,6 +58,14 @@ def test_unknown_and_malformed_handles(tmp_path: Path) -> None:
         store.read("cl_" + "0" * 24)
     with pytest.raises(KeyError):
         store.metadata("cl_" + "0" * 24)
+
+
+def test_legacy_receipt_can_still_be_recovered(tmp_path: Path) -> None:
+    store = ReceiptStore(tmp_path)
+    new_receipt = store.save("legacy content")
+    old_id = "cl_" + new_receipt.receipt_id[3:]
+    (tmp_path / f"{new_receipt.receipt_id}.txt").rename(tmp_path / f"{old_id}.txt")
+    assert store.read(old_id) == "legacy content"
 
 
 def test_tampered_content_fails_the_integrity_check(tmp_path: Path) -> None:

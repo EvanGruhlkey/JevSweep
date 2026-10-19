@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from contextlens.filtering import (
+from jevsweep.filtering import (
     DEFAULT_MAX_CHUNKS,
     STATE_CONTEXT,
     OutputPruner,
@@ -21,9 +21,9 @@ from contextlens.filtering import (
     render,
     split_chunks,
 )
-from contextlens.jev import Evaluation, JevError
-from contextlens.models import OutputCategory
-from contextlens.receipts import ReceiptStore
+from jevsweep.jev import Evaluation, JevError
+from jevsweep.models import OutputCategory
+from jevsweep.receipts import ReceiptStore
 
 
 class FakeJudge:
@@ -142,12 +142,12 @@ def test_question_is_a_single_relevance_boolean() -> None:
 
 def test_render_marks_each_omitted_run_once() -> None:
     chunks = split_chunks("\n".join(str(index) for index in range(60)), 10)
-    text, omitted = render(chunks, {chunks[0].id, chunks[-1].id}, "cl_" + "a" * 24)
-    assert text.count("contextlens omitted") == 1
+    text, omitted = render(chunks, {chunks[0].id, chunks[-1].id}, "js_" + "a" * 24)
+    assert text.count("jevsweep omitted") == 1
     assert len(omitted) == 1
     assert omitted[0].start_line == 11
     assert omitted[0].end_line == 50
-    assert "cl_" + "a" * 24 in text
+    assert "js_" + "a" * 24 in text
 
 
 def test_small_output_passes_through_without_touching_jev(tmp_path: Path) -> None:
@@ -407,11 +407,11 @@ def test_config_validates_its_thresholds(kwargs: dict[str, Any]) -> None:
 
 
 def test_config_reads_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CONTEXTLENS_MIN_TOKENS", "42")
-    monkeypatch.setenv("CONTEXTLENS_KEEP_THRESHOLD", "0.75")
+    monkeypatch.setenv("JEVSWEEP_MIN_TOKENS", "42")
+    monkeypatch.setenv("JEVSWEEP_KEEP_THRESHOLD", "0.75")
     config = PruneConfig.from_env()
     assert config.minimum_tokens == 42
     assert config.keep_threshold == 0.75
-    monkeypatch.setenv("CONTEXTLENS_MIN_TOKENS", "-1")
+    monkeypatch.setenv("JEVSWEEP_MIN_TOKENS", "-1")
     with pytest.raises(ValueError):
         PruneConfig.from_env()

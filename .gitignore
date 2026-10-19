@@ -8,8 +8,9 @@ __pycache__/
 .venv/
 .release-smoke*/
 benchmarks/artifacts/
-.contextlens/
+.jevsweep/
 build/
 dist/
 .env
 .DS_Store
+.contextlens/

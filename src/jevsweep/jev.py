@@ -17,7 +17,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from contextlens.models import estimate_state_tokens
+from jevsweep.models import estimate_state_tokens
 
 ENDPOINT = "https://ai-gateway.vercel.sh/v1/evaluate"
 MODEL = "typesafe-ai/jev"
@@ -158,7 +158,7 @@ def gateway_options() -> dict[str, Any]:
     """Provider routing, with paid-plan zero data retention as an opt-in."""
 
     options: dict[str, Any] = {"only": ["typesafe-ai"]}
-    if os.environ.get("CONTEXTLENS_VERCEL_ZDR", "").strip().lower() in {
+    if os.environ.get("JEVSWEEP_VERCEL_ZDR", "").strip().lower() in {
         "1",
         "true",
         "yes",

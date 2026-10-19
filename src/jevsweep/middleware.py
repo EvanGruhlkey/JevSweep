@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 from functools import wraps
 from typing import Any
 
-from contextlens.filtering import PruneSession
+from jevsweep.filtering import PruneSession
 
 
 class ToolResultMiddleware:

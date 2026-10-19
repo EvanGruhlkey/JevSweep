@@ -9,18 +9,18 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from contextlens.compaction import CompactionConfig, compact_transcript
-from contextlens.filtering import OutputPruner, PruneConfig, PruneRequest
-from contextlens.jev import JevGateway
-from contextlens.models import Message, ToolResult, ToolUse
-from contextlens.receipts import ReceiptStore
+from jevsweep.compaction import CompactionConfig, compact_transcript
+from jevsweep.filtering import OutputPruner, PruneConfig, PruneRequest
+from jevsweep.jev import JevGateway
+from jevsweep.models import Message, ToolResult, ToolUse
+from jevsweep.receipts import ReceiptStore
 
-DEFAULT_RECEIPTS = Path(".contextlens/receipts")
+DEFAULT_RECEIPTS = Path(".jevsweep/receipts")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="contextlens",
+        prog="jevsweep",
         description="Jev-based tool-output pruning for coding agents",
     )
     commands = parser.add_subparsers(dest="subcommand", required=True)
@@ -81,12 +81,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             )
             return 0
-        from contextlens.mcp import serve_stdio
+        from jevsweep.mcp import serve_stdio
 
         serve_stdio(ReceiptStore(arguments.receipts), task=arguments.task)
         return 0
     except (KeyError, OSError, RuntimeError, ValueError) as error:
-        print(f"contextlens: {error}", file=sys.stderr)
+        print(f"jevsweep: {error}", file=sys.stderr)
         return 2
 
 

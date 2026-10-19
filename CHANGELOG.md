@@ -2,18 +2,18 @@
 
 ## Unreleased
 
-Rewrote ContextLens around two layers and deleted everything else.
+Rewrote JevSweep around two layers and deleted everything else.
 
 ### Added
 
-- **Live tool-output pruning** (`contextlens.filtering`): a configurable
+- **Live tool-output pruning** (`jevsweep.filtering`): a configurable
   minimum-size gate, line chunking capped at 200 chunks, deterministic
   protection of diagnostics and results and their neighbours, batched Jev
   KEEP/DROP over the remaining chunks, a state split into bounded groups so
   every chunk is scored with the same task in view, an uncertainty safeguard
   that keeps anything not confidently disposable, and receipts for everything
   omitted.
-- **Transcript compaction** (`contextlens.compaction`): tool calls paired with
+- **Transcript compaction** (`jevsweep.compaction`): tool calls paired with
   their results, compact descriptors instead of payloads, two Jev questions per
   interaction, and a deterministic KEEP / TRUNCATE / DROP table. The original
   task, recent messages, host-pinned content, every edit, and recent failures
@@ -30,7 +30,7 @@ Rewrote ContextLens around two layers and deleted everything else.
 
 - The package has no runtime dependencies. `tiktoken`, `tree-sitter`, `torch`,
   `transformers`, and `swe-pruner` are gone.
-- `src/contextlens/` is seven modules instead of eighty-two files.
+- `src/jevsweep/` is seven modules instead of eighty-two files.
 - The Jev client validates every response strictly and raises on anything
   unexpected, so both layers fail open.
 

@@ -1,4 +1,4 @@
-"""Exact recovery for anything ContextLens removes.
+"""Exact recovery for anything JevSweep removes.
 
 Every observation is written verbatim before it is reduced, keyed by a stable
 handle derived from its content. The coding agent only needs the handle printed
@@ -16,9 +16,9 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from contextlens.models import estimate_tokens
+from jevsweep.models import estimate_tokens
 
-RECEIPT_PATTERN = re.compile(r"cl_[0-9a-f]{24}")
+RECEIPT_PATTERN = re.compile(r"(?:js|cl)_[0-9a-f]{24}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +65,7 @@ class ReceiptStore:
         self.root.mkdir(parents=True, exist_ok=True)
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
         receipt = Receipt(
-            receipt_id=f"cl_{digest[:24]}",
+            receipt_id=f"js_{digest[:24]}",
             content_hash=digest,
             line_count=len(content.splitlines()),
             char_count=len(content),
@@ -119,7 +119,7 @@ class ReceiptStore:
         except FileNotFoundError as error:
             raise KeyError(receipt_id) from error
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        if f"cl_{digest[:24]}" != receipt_id:
+        if receipt_id[3:] != digest[:24]:
             raise RuntimeError("receipt content integrity check failed")
         if start_line is not None or end_line is not None:
             if start_line is None or end_line is None:

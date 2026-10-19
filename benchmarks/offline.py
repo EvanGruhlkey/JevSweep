@@ -24,9 +24,9 @@ from typing import Any
 
 from benchmarks.agent import CONDITIONS, Answer, ToolCall, run_agent
 from benchmarks.report import analyze, markdown
-from contextlens.filtering import PruneConfig, protected_line
-from contextlens.jev import Evaluation
-from contextlens.models import Message
+from jevsweep.filtering import PruneConfig, protected_line
+from jevsweep.jev import Evaluation
+from jevsweep.models import Message
 
 NOISE_LINES = 1200
 SCRIPT = (
@@ -131,7 +131,7 @@ def build_repository(root: Path) -> None:
         (
             "git",
             "-c",
-            "user.email=harness@contextlens.invalid",
+            "user.email=harness@jevsweep.invalid",
             "-c",
             "user.name=harness",
             "commit",

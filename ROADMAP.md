@@ -1,4 +1,4 @@
-# ContextLens roadmap
+# JevSweep roadmap
 
 The goal is fewer coding-model input tokens per verified fix, with no extra
 agent turns and no drop in task success.

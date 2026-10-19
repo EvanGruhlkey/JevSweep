@@ -1,16 +1,16 @@
 """Jev-backed tool-result filtering before coding-model inference."""
 
-from contextlens.filtering import (
+from jevsweep.filtering import (
     OutputPruner,
     PruneConfig,
     PruneOutcome,
     PruneRequest,
     PruneSession,
 )
-from contextlens.jev import Evaluation, JevError, JevGateway, JevUsage, Judge
-from contextlens.middleware import ToolResultMiddleware
-from contextlens.models import Message, ToolResult, ToolUse, estimate_tokens
-from contextlens.receipts import Receipt, ReceiptStore
+from jevsweep.jev import Evaluation, JevError, JevGateway, JevUsage, Judge
+from jevsweep.middleware import ToolResultMiddleware
+from jevsweep.models import Message, ToolResult, ToolUse, estimate_tokens
+from jevsweep.receipts import Receipt, ReceiptStore
 
 __version__ = "0.2.0"
 

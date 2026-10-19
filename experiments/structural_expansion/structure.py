@@ -1,7 +1,7 @@
 """Structural support recovery for Python source observations.
 
 This is a retired experiment, kept for research. It is not imported by
-`src/contextlens` and is not part of the default filtering path. See the
+`src/jevsweep` and is not part of the default filtering path. See the
 README beside this file for the measurement that removed it.
 """
 

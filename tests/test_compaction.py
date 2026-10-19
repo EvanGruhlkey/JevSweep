@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from contextlens.compaction import (
+from jevsweep.compaction import (
     STATE_CONTEXT,
     CompactionConfig,
     apply_decisions,
@@ -20,9 +20,9 @@ from contextlens.compaction import (
     task_from,
     truncated_result,
 )
-from contextlens.jev import Evaluation, JevError
-from contextlens.models import Message, ToolResult, ToolUse, transcript_tokens
-from contextlens.receipts import ReceiptStore
+from jevsweep.jev import Evaluation, JevError
+from jevsweep.models import Message, ToolResult, ToolUse, transcript_tokens
+from jevsweep.receipts import ReceiptStore
 
 
 class FakeJudge:
@@ -164,10 +164,10 @@ def test_pinned_interactions_are_kept_whatever_jev_says() -> None:
 def test_truncated_result_keeps_a_prefix_and_a_recovery_hint() -> None:
     text = "first line\n" + "noise\n" * 500
     truncated = truncated_result(
-        text, is_error=False, head_chars=20, receipt_id="cl_" + "a" * 24
+        text, is_error=False, head_chars=20, receipt_id="js_" + "a" * 24
     )
     assert truncated.startswith(text[:20])
-    assert "cl_" + "a" * 24 in truncated
+    assert "js_" + "a" * 24 in truncated
     assert len(truncated) < len(text)
 
 

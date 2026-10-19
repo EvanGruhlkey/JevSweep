@@ -1,14 +1,14 @@
-"""Host-owned coding agent with transparent ContextLens layers.
+"""Host-owned coding agent with transparent JevSweep layers.
 
 Every condition gets the same task text, tool set, model, reasoning effort,
 timeout, turn limit, and hidden grader. The agent is never told that
-ContextLens exists:
+JevSweep exists:
 
     baseline          raw tool output, transcript grows untouched
     live_pruning      large tool results pruned before the model reads them
     compaction_only   raw tool output, but stale tool interactions compacted
                       out of the transcript once it passes the threshold
-    full_contextlens  both layers
+    full_jevsweep  both layers
 """
 
 from __future__ import annotations
@@ -24,24 +24,24 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from contextlens.compaction import CompactionConfig, compact_transcript
-from contextlens.filtering import PruneConfig, PruneSession
-from contextlens.jev import JevGateway, Judge
-from contextlens.middleware import ToolResultMiddleware
-from contextlens.models import (
+from jevsweep.compaction import CompactionConfig, compact_transcript
+from jevsweep.filtering import PruneConfig, PruneSession
+from jevsweep.jev import JevGateway, Judge
+from jevsweep.middleware import ToolResultMiddleware
+from jevsweep.models import (
     Message,
     ToolResult,
     ToolUse,
     estimate_tokens,
     transcript_tokens,
 )
-from contextlens.receipts import ReceiptStore
-from contextlens.rules import RuleBasedPruner
+from jevsweep.receipts import ReceiptStore
+from jevsweep.rules import RuleBasedPruner
 
 CONDITIONS = ("baseline", "live_pruning")
-EXPERIMENTAL_CONDITIONS = ("rules", "compaction_only", "full_contextlens")
-LIVE_PRUNING_CONDITIONS = frozenset({"live_pruning", "full_contextlens"})
-COMPACTION_CONDITIONS = frozenset({"compaction_only", "full_contextlens"})
+EXPERIMENTAL_CONDITIONS = ("rules", "compaction_only", "full_jevsweep")
+LIVE_PRUNING_CONDITIONS = frozenset({"live_pruning", "full_jevsweep"})
+COMPACTION_CONDITIONS = frozenset({"compaction_only", "full_jevsweep"})
 DEFAULT_MAX_TURNS = 20
 DEFAULT_COMMAND_TIMEOUT = 30
 MAX_TOOL_OUTPUT_CHARS = 400_000

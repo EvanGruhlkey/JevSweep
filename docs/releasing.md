@@ -1,12 +1,12 @@
 # Release process
 
-ContextLens uses semantic versioning. A release is created only from a clean
+JevSweep uses semantic versioning. A release is created only from a clean
 revision that passes the complete local and CI validation matrix.
 
 ## Checklist
 
 1. Confirm `CHANGELOG.md` contains the release version and date.
-2. Keep `pyproject.toml` and `contextlens.__version__` synchronized.
+2. Keep `pyproject.toml` and `jevsweep.__version__` synchronized.
 3. Run:
 
    ```bash
@@ -22,8 +22,8 @@ revision that passes the complete local and CI validation matrix.
 4. Install the wheel in a fresh environment and run:
 
    ```bash
-   contextlens --help
-   contextlens prune --help
+   jevsweep --help
+   jevsweep prune --help
    ```
 
 5. Confirm the offline harness still shows live pruning reducing injected

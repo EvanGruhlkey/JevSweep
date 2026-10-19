@@ -25,10 +25,10 @@ from benchmarks.offline import LocalJudge, build_repository
 from benchmarks.offline import run as run_offline
 from benchmarks.report import analyze, comma, markdown
 from benchmarks.tasks import load_task, load_tasks, verify
-from contextlens.compaction import CompactionConfig
-from contextlens.filtering import PruneConfig
-from contextlens.jev import Evaluation
-from contextlens.models import Message, ToolResult, ToolUse
+from jevsweep.compaction import CompactionConfig
+from jevsweep.filtering import PruneConfig
+from jevsweep.jev import Evaluation
+from jevsweep.models import Message, ToolResult, ToolUse
 
 
 class DropJudge:
@@ -124,9 +124,9 @@ def test_tool_schemas_match_the_tool_set() -> None:
     }
 
 
-def test_prompt_never_mentions_contextlens() -> None:
+def test_prompt_never_mentions_jevsweep() -> None:
     prompt = coding_prompt("fix the parser").lower()
-    assert "contextlens" not in prompt
+    assert "jevsweep" not in prompt
     assert "jev" not in prompt
     assert "prune" not in prompt
 
@@ -226,7 +226,7 @@ def test_live_pruning_shrinks_tool_output(tmp_path: Path) -> None:
     assert payload["tool_output_reduction_percent"] > 0
     assert payload["jev_requests"] > 0
     assert payload["jev_input_tokens"] > 0
-    assert "contextlens omitted" in transcript[2].tool_results[0].text
+    assert "jevsweep omitted" in transcript[2].tool_results[0].text
 
 
 def test_solver_receives_filtered_result_before_next_inference(tmp_path: Path) -> None:
@@ -255,7 +255,7 @@ def test_solver_receives_filtered_result_before_next_inference(tmp_path: Path) -
     )
     assert metrics.status == "completed"
     assert observed and original not in observed
-    assert any("contextlens omitted" in result for result in observed)
+    assert any("jevsweep omitted" in result for result in observed)
 
 
 def test_the_agent_can_recover_omitted_output(tmp_path: Path) -> None:
@@ -302,7 +302,7 @@ def test_bad_recovery_handles_do_not_break_the_run(tmp_path: Path) -> None:
         solver=solver_for(
             [
                 ToolCall("recover", {}, "c1"),
-                ToolCall("recover", {"receipt": "cl_" + "0" * 24}, "c2"),
+                ToolCall("recover", {"receipt": "js_" + "0" * 24}, "c2"),
                 ToolCall("nonexistent", {}, "c3"),
             ]
         ),
@@ -334,7 +334,7 @@ def test_compaction_shrinks_the_transcript(tmp_path: Path) -> None:
     compacted, compacted_transcript = run_agent(
         workspace,
         "read the log",
-        "full_contextlens",
+        "full_jevsweep",
         state=tmp_path / "compacted",
         solver=solver_for(script),
         judge=DropJudge(),
@@ -495,7 +495,7 @@ def test_analysis_records_quality_regressions() -> None:
         }
     )
     assert "1 regression(s) — a" in text
-    assert "nothing a ContextLens condition could regress" not in text
+    assert "nothing a JevSweep condition could regress" not in text
 
 
 def test_markdown_does_not_claim_preserved_fixes_when_baseline_failed() -> None:
@@ -524,8 +524,8 @@ def test_markdown_does_not_claim_preserved_fixes_when_baseline_failed() -> None:
             "analysis": analyze(rows, 1),
         }
     )
-    assert "nothing a ContextLens condition could regress" in text
-    assert "No ContextLens condition lost" not in text
+    assert "nothing a JevSweep condition could regress" in text
+    assert "No JevSweep condition lost" not in text
 
 
 def test_markdown_reports_missing_numbers_as_not_available() -> None:

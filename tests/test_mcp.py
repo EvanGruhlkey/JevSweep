@@ -8,10 +8,10 @@ from typing import Any
 
 import pytest
 
-from contextlens.filtering import PruneConfig
-from contextlens.jev import Evaluation
-from contextlens.mcp import PROTOCOLS, TOOLS, Server, dispatch, serve_stdio
-from contextlens.receipts import ReceiptStore
+from jevsweep.filtering import PruneConfig
+from jevsweep.jev import Evaluation
+from jevsweep.mcp import PROTOCOLS, TOOLS, Server, dispatch, serve_stdio
+from jevsweep.receipts import ReceiptStore
 
 
 class FakeJudge:
@@ -53,7 +53,7 @@ def test_initialize_echoes_a_supported_protocol(tmp_path: Path) -> None:
     )
     assert response is not None
     assert response["result"]["protocolVersion"] == "2025-06-18"
-    assert "ContextLens" in response["result"]["instructions"]
+    assert "JevSweep" in response["result"]["instructions"]
     unsupported = dispatch(
         server(tmp_path), request("initialize", protocolVersion="1999-01-01")
     )
@@ -98,8 +98,8 @@ def test_prune_returns_kept_content_with_a_recovery_note(tmp_path: Path) -> None
     result = response["result"]
     assert result["isError"] is False
     text = result["content"][0]["text"]
-    assert "contextlens omitted" in text
-    assert "context_recover cl_" in text
+    assert "jevsweep omitted" in text
+    assert "context_recover js_" in text
     assert len(text) < len(noise())
 
 
@@ -156,8 +156,8 @@ def test_invalid_recover_arguments_are_rejected(tmp_path: Path) -> None:
     active = server(tmp_path)
     for arguments in (
         {"receipt_id": "nope"},
-        {"receipt_id": "cl_" + "0" * 24, "start_line": 0},
-        {"receipt_id": "cl_" + "0" * 24},
+        {"receipt_id": "js_" + "0" * 24, "start_line": 0},
+        {"receipt_id": "js_" + "0" * 24},
     ):
         response = dispatch(
             active, request("tools/call", name="context_recover", arguments=arguments)
@@ -189,7 +189,7 @@ def test_serve_stdio_answers_line_by_line(tmp_path: Path) -> None:
     )
     responses = [json.loads(line) for line in output.getvalue().splitlines()]
     assert len(responses) == 3
-    assert responses[0]["result"]["serverInfo"]["name"] == "contextlens"
+    assert responses[0]["result"]["serverInfo"]["name"] == "jevsweep"
     assert responses[2]["error"]["code"] == -32700
 
 

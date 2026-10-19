@@ -11,9 +11,9 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from contextlens.filtering import PruneSession
-from contextlens.middleware import ToolResultMiddleware
-from contextlens.receipts import ReceiptStore
+from jevsweep.filtering import PruneSession
+from jevsweep.middleware import ToolResultMiddleware
+from jevsweep.receipts import ReceiptStore
 
 TRANSCRIPT_TAIL_BYTES = 512_000
 
@@ -21,7 +21,7 @@ TRANSCRIPT_TAIL_BYTES = 512_000
 def _filter(task: str, output: str, tool: str, arguments: Mapping[str, Any]) -> str:
     session = PruneSession(
         ReceiptStore(
-            Path(os.environ.get("JEVSWEEP_RECEIPTS", ".contextlens/receipts"))
+            Path(os.environ.get("JEVSWEEP_RECEIPTS", ".jevsweep/receipts"))
         ),
         task=task,
     )

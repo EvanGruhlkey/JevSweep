@@ -6,7 +6,7 @@ keep and deterministically closes over the Python AST: enclosing scopes,
 for syntactic validity, and the definitions of names referenced by the kept
 lines, up to a bounded number of hops.
 
-It was the "structural" half of an earlier ContextLens, where a source read was
+It was the "structural" half of an earlier JevSweep, where a source read was
 reduced by Jev and then re-expanded to stay compilable.
 
 ## Why it is retired
@@ -33,6 +33,6 @@ The full report is in
 ## State of the code
 
 `structure.py` is standalone: it carries its own `LineReason` enum and imports
-nothing from `contextlens`. It has no tests in the current suite and no
+nothing from `jevsweep`. It has no tests in the current suite and no
 callers. Reviving it means re-integrating it behind an explicit opt-in and
 re-running the paired benchmark to show it no longer inflates trajectories.

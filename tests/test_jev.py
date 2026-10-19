@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from contextlens.jev import (
+from jevsweep.jev import (
     Evaluation,
     JevError,
     JevGateway,
@@ -115,9 +115,9 @@ def test_batch_questions_drops_items_that_cannot_fit() -> None:
 def test_gateway_options_opt_into_zero_data_retention(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("CONTEXTLENS_VERCEL_ZDR", raising=False)
+    monkeypatch.delenv("JEVSWEEP_VERCEL_ZDR", raising=False)
     assert gateway_options() == {"only": ["typesafe-ai"]}
-    monkeypatch.setenv("CONTEXTLENS_VERCEL_ZDR", "1")
+    monkeypatch.setenv("JEVSWEEP_VERCEL_ZDR", "1")
     assert gateway_options()["zeroDataRetention"] is True
 
 

@@ -12,4 +12,4 @@ For verbose read-only commands such as searches, file reads, and test discovery,
 jevsweep-run --task "the current coding task" -- rg pattern src
 ```
 
-The wrapper captures the command output, saves a receipt, and sends only its filtered stdout to Codex. It preserves stderr and exit status. Use ordinary commands for edits, interactive tools, and short output. If a receipt marker appears, recover its complete original with `contextlens recover RECEIPT_ID`. This skill guides explicit wrapper use; it cannot intercept Codex commands run without the wrapper.
+The wrapper captures the command output, saves a receipt, and sends only its filtered stdout to Codex. It preserves stderr and exit status. Use ordinary commands for edits, interactive tools, and short output. If a receipt marker appears, recover its complete original with `jevsweep recover RECEIPT_ID`. This skill guides explicit wrapper use; it cannot intercept Codex commands run without the wrapper.

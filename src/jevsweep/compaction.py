@@ -20,7 +20,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
-from contextlens.jev import (
+from jevsweep.jev import (
     DEFAULT_MAX_REQUEST_TOKENS,
     DEFAULT_MAX_STATE_TOKENS,
     Evaluation,
@@ -30,7 +30,7 @@ from contextlens.jev import (
     batch_questions,
     boolean_question,
 )
-from contextlens.models import (
+from jevsweep.models import (
     Message,
     ToolResult,
     ToolUse,
@@ -38,7 +38,7 @@ from contextlens.models import (
     transcript_chars,
     transcript_tokens,
 )
-from contextlens.receipts import ReceiptStore
+from jevsweep.receipts import ReceiptStore
 
 DEFAULT_TRIGGER_TOKENS = 20_000
 DEFAULT_PRESERVE_RECENT_MESSAGES = 8
@@ -363,7 +363,7 @@ def truncated_result(
     )
     head = f"{text[:head_chars]}\n" if head_chars else ""
     return (
-        f"{head}[contextlens compacted {removed} chars of this "
+        f"{head}[jevsweep compacted {removed} chars of this "
         f"{'failed ' if is_error else ''}tool result; {recovery}]"
     )
 
@@ -418,7 +418,7 @@ def _drop_result(result: ToolResult, receipts: ReceiptStore) -> ToolResult:
     receipt_id = result.receipt_id or receipts.save(result.text).receipt_id
     return replace(
         result,
-        text=f"[contextlens compacted; recover {receipt_id}]",
+        text=f"[jevsweep compacted; recover {receipt_id}]",
         receipt_id=receipt_id,
     )
 

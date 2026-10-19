@@ -5,11 +5,11 @@ import json
 import sys
 from pathlib import Path
 
-from contextlens import integrations
-from contextlens.filtering import PruneConfig
-from contextlens.install import install_claude, install_codex
-from contextlens.models import estimate_tokens
-from contextlens.receipts import ReceiptStore
+from jevsweep import integrations
+from jevsweep.filtering import PruneConfig
+from jevsweep.install import install_claude, install_codex
+from jevsweep.models import estimate_tokens
+from jevsweep.receipts import ReceiptStore
 from tests.test_filtering import FakeJudge, noise
 
 
@@ -20,7 +20,7 @@ def test_claude_hook_replaces_only_stdout_before_delivery(
     monkeypatch.setattr(
         integrations,
         "_filter",
-        lambda task, output, tool, arguments: "filtered receipt=cl_" + "a" * 24,
+        lambda task, output, tool, arguments: "filtered receipt=js_" + "a" * 24,
     )
     response = {"stdout": noise(), "stderr": "", "interrupted": False}
     payload = {
@@ -107,8 +107,8 @@ def test_codex_wrapper_prints_only_filtered_output(tmp_path: Path, monkeypatch) 
 
 
 def test_exact_recovery_and_metrics_for_bypass_and_prune(tmp_path: Path) -> None:
-    from contextlens.filtering import PruneSession
-    from contextlens.middleware import ToolResultMiddleware
+    from jevsweep.filtering import PruneSession
+    from jevsweep.middleware import ToolResultMiddleware
 
     store = ReceiptStore(tmp_path)
     raw = noise()
@@ -133,8 +133,8 @@ def test_exact_recovery_and_metrics_for_bypass_and_prune(tmp_path: Path) -> None
 
 
 def test_minimum_savings_bypass_reports_zero_savings(tmp_path: Path) -> None:
-    from contextlens.filtering import PruneSession
-    from contextlens.middleware import ToolResultMiddleware
+    from jevsweep.filtering import PruneSession
+    from jevsweep.middleware import ToolResultMiddleware
 
     lines = noise().splitlines()
     for index in range(20, len(lines), 40):

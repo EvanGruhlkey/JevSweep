@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from contextlens.cli import main, parse_transcript, render_transcript
-from contextlens.models import Message, ToolResult, ToolUse
-from contextlens.receipts import ReceiptStore
+from jevsweep.cli import main, parse_transcript, render_transcript
+from jevsweep.models import Message, ToolResult, ToolUse
+from jevsweep.receipts import ReceiptStore
 
 
 def test_transcript_round_trips() -> None:
@@ -18,7 +18,7 @@ def test_transcript_round_trips() -> None:
             "user",
             "",
             (),
-            (ToolResult("t1", "hit", is_error=True, receipt_id="cl_" + "a" * 24),),
+            (ToolResult("t1", "hit", is_error=True, receipt_id="js_" + "a" * 24),),
         ),
     )
     assert parse_transcript(render_transcript(messages)) == messages
@@ -73,8 +73,8 @@ def test_recover_supports_a_line_range(
 def test_unknown_receipt_reports_an_error(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert main(["recover", "cl_" + "0" * 24, "--receipts", str(tmp_path)]) == 2
-    assert "contextlens:" in capsys.readouterr().err
+    assert main(["recover", "js_" + "0" * 24, "--receipts", str(tmp_path)]) == 2
+    assert "jevsweep:" in capsys.readouterr().err
 
 
 def test_prune_fails_open_without_credentials(
@@ -83,7 +83,7 @@ def test_prune_fails_open_without_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
-    monkeypatch.setenv("CONTEXTLENS_MIN_TOKENS", "10")
+    monkeypatch.setenv("JEVSWEEP_MIN_TOKENS", "10")
     source = tmp_path / "output.txt"
     output = "\n".join(f"progress line {index}" for index in range(400))
     source.write_text(output, encoding="utf-8")

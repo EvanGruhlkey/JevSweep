@@ -1,6 +1,6 @@
 # Architecture
 
-ContextLens sits between a coding agent's tools and the coding model. It
+JevSweep sits between a coding agent's tools and the coding model. It
 reduces what the model has to read, and it does so without taking part in the
 agent's reasoning.
 
@@ -29,13 +29,13 @@ recoverable through a receipt handle.
 
 | File | Responsibility |
 | --- | --- |
-| [`models.py`](../src/contextlens/models.py) | `Message`, `ToolUse`, `ToolResult`, `LineRange`, `OutputCategory`, token estimates |
-| [`jev.py`](../src/contextlens/jev.py) | The gateway, strict response validation, question construction, request batching, usage accounting |
-| [`receipts.py`](../src/contextlens/receipts.py) | Content-addressed store for originals; exact text or line-range recovery |
-| [`filtering.py`](../src/contextlens/filtering.py) | Live pruning of one tool result |
-| [`compaction.py`](../src/contextlens/compaction.py) | Relevance-based garbage collection over a transcript |
-| [`cli.py`](../src/contextlens/cli.py) | `prune`, `compact`, `recover`, `mcp` |
-| [`mcp.py`](../src/contextlens/mcp.py) | `context_prune` and `context_recover` over stdio |
+| [`models.py`](../src/jevsweep/models.py) | `Message`, `ToolUse`, `ToolResult`, `LineRange`, `OutputCategory`, token estimates |
+| [`jev.py`](../src/jevsweep/jev.py) | The gateway, strict response validation, question construction, request batching, usage accounting |
+| [`receipts.py`](../src/jevsweep/receipts.py) | Content-addressed store for originals; exact text or line-range recovery |
+| [`filtering.py`](../src/jevsweep/filtering.py) | Live pruning of one tool result |
+| [`compaction.py`](../src/jevsweep/compaction.py) | Relevance-based garbage collection over a transcript |
+| [`cli.py`](../src/jevsweep/cli.py) | `prune`, `compact`, `recover`, `mcp` |
+| [`mcp.py`](../src/jevsweep/mcp.py) | `context_prune` and `context_recover` over stdio |
 
 `filtering.py` and `compaction.py` both depend on `models.py`, `jev.py`, and
 `receipts.py`, and on nothing else. They do not depend on each other. A host can

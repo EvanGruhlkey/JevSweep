@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "contextlens"
+name = "jevsweep"
 version = "0.2.0"
 description = "Jev-based tool-output pruning for coding agents"
 readme = "README.md"
@@ -37,16 +37,16 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/EvanGruhlkey/ContextLens"
-Documentation = "https://github.com/EvanGruhlkey/ContextLens#readme"
-Issues = "https://github.com/EvanGruhlkey/ContextLens/issues"
-Repository = "https://github.com/EvanGruhlkey/ContextLens.git"
+Homepage = "https://github.com/EvanGruhlkey/JevSweep"
+Documentation = "https://github.com/EvanGruhlkey/JevSweep#readme"
+Issues = "https://github.com/EvanGruhlkey/JevSweep/issues"
+Repository = "https://github.com/EvanGruhlkey/JevSweep.git"
 
 [project.scripts]
-contextlens = "contextlens.cli:main"
-jevsweep-claude-hook = "contextlens.integrations:claude_main"
-jevsweep-run = "contextlens.integrations:codex_main"
-jevsweep-install = "contextlens.install:main"
+jevsweep = "jevsweep.cli:main"
+jevsweep-claude-hook = "jevsweep.integrations:claude_main"
+jevsweep-run = "jevsweep.integrations:codex_main"
+jevsweep-install = "jevsweep.install:main"
 
 [tool.hatch.build]
 # The paired benchmark harness is development-only. Expose it to editable
@@ -54,7 +54,7 @@ jevsweep-install = "contextlens.install:main"
 dev-mode-dirs = ["src", "."]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/contextlens"]
+packages = ["src/jevsweep"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -62,7 +62,7 @@ addopts = "-ra"
 
 [tool.coverage.run]
 branch = true
-source = ["contextlens"]
+source = ["jevsweep"]
 
 [tool.coverage.report]
 show_missing = true
@@ -78,4 +78,4 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["contextlens"]
+packages = ["jevsweep"]

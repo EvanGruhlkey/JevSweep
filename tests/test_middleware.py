@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from contextlens.filtering import PruneConfig, PruneSession
-from contextlens.middleware import ToolResultMiddleware
-from contextlens.receipts import ReceiptStore
+from jevsweep.filtering import PruneConfig, PruneSession
+from jevsweep.middleware import ToolResultMiddleware
+from jevsweep.receipts import ReceiptStore
 from tests.test_filtering import FakeJudge, noise
 
 
