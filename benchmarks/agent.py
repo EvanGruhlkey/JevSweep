@@ -27,6 +27,7 @@ from typing import Any
 from contextlens.compaction import CompactionConfig, compact_transcript
 from contextlens.filtering import PruneConfig, PruneSession
 from contextlens.jev import JevGateway, Judge
+from contextlens.middleware import ToolResultMiddleware
 from contextlens.models import (
     Message,
     ToolResult,
@@ -151,9 +152,7 @@ class RunMetrics:
     jev: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        removed = max(
-            0, self.raw_tool_output_tokens - self.injected_tool_output_tokens
-        )
+        removed = max(0, self.raw_tool_output_tokens - self.injected_tool_output_tokens)
         return {
             "status": self.status,
             "agent_seconds": self.agent_seconds,
@@ -326,6 +325,7 @@ def run_agent(
             judge=judge if judge is not None else JevGateway(),
             config=prune_config,
         )
+    middleware = ToolResultMiddleware(session) if session is not None else None
     compactor = (
         compaction_config or CompactionConfig()
         if condition in COMPACTION_CONDITIONS
@@ -349,20 +349,14 @@ def run_agent(
                 Message(
                     "assistant",
                     "",
-                    (
-                        ToolUse(
-                            action.call_id, action.name, dict(action.arguments)
-                        ),
-                    ),
+                    (ToolUse(action.call_id, action.name, dict(action.arguments)),),
                 )
             )
             raw, is_error = _execute(action, tools, receipts)
             metrics.tool_calls += 1
             text = raw
-            if session is not None and action.name in PRUNABLE_TOOLS:
-                text = session.observe(
-                    raw, tool=action.name, arguments=action.arguments
-                ).text
+            if middleware is not None and action.name in PRUNABLE_TOOLS:
+                text = middleware.process(action.name, action.arguments, raw)
             if action.name != "recover":
                 metrics.raw_tool_output_tokens += estimate_tokens(raw)
                 metrics.injected_tool_output_tokens += estimate_tokens(text)
@@ -535,9 +529,7 @@ def http_solver(
             "reasoning": {"effort": effort},
             "input": response_input(messages),
         }
-        data = _post(
-            f"{url}/responses", key, payload, max(5, min(int(remaining), 180))
-        )
+        data = _post(f"{url}/responses", key, payload, max(5, min(int(remaining), 180)))
         for metric, value in _usage(data).items():
             usage[metric] = usage.get(metric, 0) + value
         output = data.get("output")
