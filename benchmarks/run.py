@@ -4,6 +4,7 @@ Three conditions run the same frozen tasks with the same model, reasoning
 effort, tools, prompt, repository revision, timeout, and turn limit:
 
     baseline             raw tool output, transcript grows untouched
+    rules                repeated progress lines removed by fixed rules
     live_pruning         large tool results pruned before the coding model
     live_and_compaction  live pruning plus periodic transcript compaction
 

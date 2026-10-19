@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -102,8 +104,11 @@ def test_manifest_validation_rejects_bad_input(tmp_path: Path) -> None:
 
 
 def test_verify_reports_failed_and_broken_commands(tmp_path: Path) -> None:
-    assert verify(tmp_path, (("true",),))["success"] is True
-    assert verify(tmp_path, (("false",),))["success"] is False
+    assert verify(tmp_path, ((sys.executable, "-c", "pass"),))["success"] is True
+    assert (
+        verify(tmp_path, ((sys.executable, "-c", "raise SystemExit(1)"),))["success"]
+        is False
+    )
     broken = verify(tmp_path, (("definitely-not-a-command",),))
     assert broken["success"] is False
     assert broken["commands"][0]["returncode"] is None
@@ -133,9 +138,12 @@ def test_tools_stay_inside_the_workspace(tmp_path: Path) -> None:
     assert tools["read_file"]({"path": "../escape.txt"}).startswith("Path is outside")
     assert tools["read_file"]({"path": "missing.txt"}).startswith("File not found")
     assert tools["read_file"]({}).startswith("read_file requires")
-    assert tools["read_file"](
-        {"path": "log.txt", "start_line": 2, "end_line": 3}
-    ).count("\n") <= 2
+    assert (
+        tools["read_file"]({"path": "log.txt", "start_line": 2, "end_line": 3}).count(
+            "\n"
+        )
+        <= 2
+    )
     assert tools["grep"]({}).startswith("grep requires")
     assert "log.txt" in tools["grep"]({"pattern": "progress step 5 "})
     assert tools["grep"]({"pattern": "zzz-not-present"}) == "(no matches)"
@@ -156,7 +164,9 @@ def test_tools_cannot_read_the_harness_credentials(
     assert "OPENAI_BASE_URL" not in sanitized_environment()
     assert sanitized_environment()["PLAIN_SETTING"] == "kept"
     workspace = noisy_repository(tmp_path / "repo")
-    output = workspace_tools(workspace)["shell"]({"command": "env"})
+    output = workspace_tools(workspace)["shell"](
+        {"command": "set" if os.name == "nt" else "env"}
+    )
     assert "sk-secret-value" not in output
     assert "vck-secret-value" not in output
     assert "PLAIN_SETTING=kept" in output
@@ -271,9 +281,7 @@ def test_bad_recovery_handles_do_not_break_the_run(tmp_path: Path) -> None:
         max_turns=6,
     )
     assert metrics.to_dict()["status"] == "completed"
-    texts = [
-        result.text for message in transcript for result in message.tool_results
-    ]
+    texts = [result.text for message in transcript for result in message.tool_results]
     assert texts[0].startswith("recover requires")
     assert texts[1].startswith("recover failed")
     assert texts[2].startswith("Tool unavailable")
@@ -310,9 +318,7 @@ def test_compaction_shrinks_the_transcript(tmp_path: Path) -> None:
     first = compacted.to_dict()
     assert first["compaction_events"] > 0
     assert first["compaction_tokens_removed"] > 0
-    assert first["final_transcript_tokens"] < plain.to_dict()[
-        "final_transcript_tokens"
-    ]
+    assert first["final_transcript_tokens"] < plain.to_dict()["final_transcript_tokens"]
     assert first["agent_turns"] == plain.to_dict()["agent_turns"]
     assert compacted_transcript[0] == plain_transcript[0]
 
@@ -372,34 +378,36 @@ def test_local_judge_protects_diagnostics_and_task_words() -> None:
     assert probabilities["c3"] > 0.5
 
 
-def test_offline_harness_measures_all_four_conditions(tmp_path: Path) -> None:
+def test_offline_harness_measures_all_conditions(tmp_path: Path) -> None:
     report = run_offline(tmp_path / "offline.json")
     rows = {row["condition"]: row for row in report["rows"]}
     assert set(rows) == set(CONDITIONS)
     baseline = rows["baseline"]
+    rules = rows["rules"]
     pruned = rows["live_pruning"]
     compacted = rows["compaction_only"]
     both = rows["full_contextlens"]
-    assert baseline["injected_tool_output_tokens"] == baseline[
-        "raw_tool_output_tokens"
-    ]
-    assert pruned["injected_tool_output_tokens"] < baseline[
-        "injected_tool_output_tokens"
-    ]
+    assert baseline["injected_tool_output_tokens"] == baseline["raw_tool_output_tokens"]
+    assert (
+        rules["injected_tool_output_tokens"] <= baseline["injected_tool_output_tokens"]
+    )
+    assert (
+        pruned["injected_tool_output_tokens"] < baseline["injected_tool_output_tokens"]
+    )
     assert pruned["compaction_events"] == 0
-    assert compacted["injected_tool_output_tokens"] == baseline[
-        "injected_tool_output_tokens"
-    ]
+    assert (
+        compacted["injected_tool_output_tokens"]
+        == baseline["injected_tool_output_tokens"]
+    )
     assert compacted["compaction_events"] >= 1
-    assert compacted["final_transcript_tokens"] < baseline[
-        "final_transcript_tokens"
-    ]
+    assert compacted["final_transcript_tokens"] < baseline["final_transcript_tokens"]
     assert both["compaction_events"] >= 1
     assert both["final_transcript_tokens"] < pruned["final_transcript_tokens"]
     assert report["analysis"]["complete"] is True
-    assert report["analysis"]["conditions"]["compaction_only"][
-        "tasks_with_compaction"
-    ] == 1
+    assert (
+        report["analysis"]["conditions"]["compaction_only"]["tasks_with_compaction"]
+        == 1
+    )
     assert "no coding model" in report["note"].lower()
 
 
@@ -458,6 +466,7 @@ def test_analysis_records_quality_regressions() -> None:
     analysis = analyze(
         [
             row("baseline", True),
+            row("rules", True),
             row("live_pruning", False),
             row("compaction_only", True),
             row("full_contextlens", True),

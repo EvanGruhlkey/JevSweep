@@ -10,6 +10,7 @@ from benchmarks.agent import COMPACTION_CONDITIONS, CONDITIONS
 
 LABELS = {
     "baseline": "Baseline",
+    "rules": "Simple Rules",
     "live_pruning": "Live Pruning",
     "compaction_only": "Compaction Only",
     "full_contextlens": "Full ContextLens",
@@ -215,7 +216,7 @@ def markdown(report: dict[str, Any]) -> str:
         f"{len(report.get('tasks', []))} frozen task(s). "
         f"Implementation `{str(report.get('implementation_revision') or 'n/a')[:12]}`.",
         "",
-        "All four conditions share the coding model, reasoning effort, issue "
+        "All conditions share the coding model, reasoning effort, issue "
         "prompt, repository commit, tool set, timeout, turn limit, and hidden "
         "grader. The agent is never told that ContextLens exists. Jev tokens "
         "are counted separately and never enter coding-model input.",

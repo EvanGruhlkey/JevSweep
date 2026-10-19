@@ -326,6 +326,8 @@ class OutputPruner:
             return passthrough("binary")
         if category is OutputCategory.STRUCTURED:
             return passthrough("structured")
+        if any(len(line) > MAX_LINE_CHARS for line in request.output.split("\n")):
+            return passthrough("long_line")
         chunks = split_chunks(
             request.output, self.config.chunk_lines, self.config.max_chunks
         )
@@ -424,18 +426,14 @@ class OutputPruner:
             (
                 {
                     **base,
-                    "output": [
-                        {"id": chunk.id, "text": chunk.text} for chunk in group
-                    ],
+                    "output": [{"id": chunk.id, "text": chunk.text} for chunk in group],
                 },
                 tuple(group),
             )
             for group in groups
         ]
 
-    def _kept(
-        self, chunks: Sequence[Chunk], scores: Mapping[str, float]
-    ) -> set[str]:
+    def _kept(self, chunks: Sequence[Chunk], scores: Mapping[str, float]) -> set[str]:
         """Keep protected chunks, high scores, and anything left uncertain."""
 
         kept: set[str] = set()
@@ -610,9 +608,7 @@ def looks_binary(output: str) -> bool:
     if not sample:
         return False
     control = sum(
-        1
-        for char in sample
-        if ord(char) < 9 or 13 < ord(char) < 32 or ord(char) == 127
+        1 for char in sample if ord(char) < 9 or 13 < ord(char) < 32 or ord(char) == 127
     )
     return control > len(sample) * 0.05
 

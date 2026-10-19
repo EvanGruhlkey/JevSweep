@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
+import stat
 import subprocess
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -219,8 +221,14 @@ def run(output: Path) -> dict[str, Any]:
         "analysis": analyze(rows, 1),
         "status": "completed",
     }
-    shutil.rmtree(workspace_root)
+    shutil.rmtree(workspace_root, onerror=_remove_readonly)
     return report
+
+
+def _remove_readonly(function: Any, path: str, error: Any) -> None:
+    """Git object files can be read-only in Windows fixture checkouts."""
+    os.chmod(path, stat.S_IWRITE)
+    function(path)
 
 
 def main(argv: list[str] | None = None) -> int:

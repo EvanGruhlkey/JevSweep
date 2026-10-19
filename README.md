@@ -127,6 +127,38 @@ Pruning therefore changes what the coding model sees by default without destroyi
 
 ## Run it
 
+### Automatic coding-agent integration
+
+Install the middleware at the host's tool-result boundary. It receives the
+raw result before it is appended to the coding model's transcript. The agent
+does not choose when to call a pruning tool.
+
+```python
+from pathlib import Path
+from contextlens.filtering import PruneSession
+from contextlens.middleware import ToolResultMiddleware
+from contextlens.receipts import ReceiptStore
+
+store = ReceiptStore(Path(".contextlens/receipts"))
+session = PruneSession(store, task="fix the failing parser test")
+middleware = ToolResultMiddleware(session)
+tools["read_file"] = middleware.wrap("read_file", tools["read_file"])
+```
+
+`wrap` expects a synchronous callable that takes one argument mapping and
+returns plain text. For other dispatchers, call `middleware.process(tool,
+arguments, raw_result)` immediately after tool execution. Nontext and short
+results pass through. Diagnostic lines pass through. The default gate asks Jev
+only when the original is at least twice the minimum expected savings of 512
+estimated tokens. It returns the original if Jev fails or saves too little.
+This gate is a heuristic; exact break-even depends on provider pricing and
+latency. The receipt store preserves the exact original, including long lines.
+
+For long transcripts, use `contextlens.compaction.compact` with the same
+receipt store. Dropped tool results retain a receipt marker so the original
+can be recovered. The 20,000-token trigger and recent-message protection are
+configured with `CompactionConfig`.
+
 Python 3.12+.
 
 ```bash
@@ -175,6 +207,9 @@ Without a Jev gateway key, pruning and compaction fail open and return the origi
 ## Benchmark it
 
 The paired benchmark runs the same frozen coding tasks under multiple context conditions.
+Its current runner includes baseline, a simple deterministic rules condition,
+Jev live pruning, compaction only, and Jev with compaction. Historical result
+tables above predate the rules condition and remain labeled as such.
 
 ```bash
 export OPENAI_API_KEY="..."

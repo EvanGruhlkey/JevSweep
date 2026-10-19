@@ -133,9 +133,9 @@ def test_edits_failures_and_pins_are_protected() -> None:
 
 
 def test_questions_ask_only_about_the_call_and_its_result() -> None:
-    interaction = collect_interactions(transcript(6), CompactionConfig(
-        preserve_recent_messages=2
-    ))[0]
+    interaction = collect_interactions(
+        transcript(6), CompactionConfig(preserve_recent_messages=2)
+    )[0]
     questions = questions_for(interaction)
     assert set(questions) == {f"call_{interaction.id}", f"result_{interaction.id}"}
     assert all(question["type"] == "boolean" for question in questions.values())
@@ -173,16 +173,14 @@ def test_truncated_result_keeps_a_prefix_and_a_recovery_hint() -> None:
 
 def test_short_results_are_not_truncated() -> None:
     text = "short"
-    assert truncated_result(
-        text, is_error=False, head_chars=300, receipt_id=None
-    ) == text
+    assert (
+        truncated_result(text, is_error=False, head_chars=300, receipt_id=None) == text
+    )
 
 
 def test_truncated_error_results_say_so() -> None:
     text = "boom\n" + "x" * 900
-    truncated = truncated_result(
-        text, is_error=True, head_chars=10, receipt_id=None
-    )
+    truncated = truncated_result(text, is_error=True, head_chars=10, receipt_id=None)
     assert "failed tool result" in truncated
     assert "re-run the tool" in truncated
 
@@ -215,9 +213,7 @@ def test_apply_decisions_records_a_receipt_for_truncated_output(
     decisions = tuple(decide(item, 1.0, 0.0, config) for item in interactions)
     receipts = ReceiptStore(tmp_path)
     rebuilt = apply_decisions(messages, decisions, interactions, config, receipts)
-    truncated = [
-        result for message in rebuilt for result in message.tool_results
-    ]
+    truncated = [result for message in rebuilt for result in message.tool_results]
     assert truncated and all(item.receipt_id for item in truncated)
     original = next(
         result
@@ -226,6 +222,20 @@ def test_apply_decisions_records_a_receipt_for_truncated_output(
         if result.tool_use_id == truncated[0].tool_use_id
     )
     assert receipts.read(str(truncated[0].receipt_id)) == original.text
+
+
+def test_dropped_interaction_keeps_recovery_marker(tmp_path: Path) -> None:
+    messages = transcript(4)
+    config = CompactionConfig(preserve_recent_messages=0)
+    interactions = collect_interactions(messages, config)
+    decisions = tuple(decide(item, 0.0, 0.0, config) for item in interactions)
+    receipts = ReceiptStore(tmp_path)
+    rebuilt = apply_decisions(messages, decisions, interactions, config, receipts)
+    assert any(message.tool_results for message in rebuilt)
+    result = next(result for message in rebuilt for result in message.tool_results)
+    original = next(result for message in messages for result in message.tool_results)
+    assert result.receipt_id
+    assert receipts.read(result.receipt_id) == original.text
 
 
 def test_fit_state_shrinks_until_the_ceiling_is_met() -> None:
@@ -267,29 +277,42 @@ def test_small_transcripts_pass_through() -> None:
     assert judge.states == []
 
 
-def test_compaction_drops_stale_interactions() -> None:
+def test_large_transcript_without_receipts_fails_open() -> None:
+    messages = transcript(14)
+    result = compact_transcript(
+        messages,
+        FakeJudge(call=0.0, result=0.0),
+        config=CompactionConfig(trigger_tokens=100),
+    )
+    assert result.messages == messages
+    assert result.reason == "no_receipt_store"
+
+
+def test_compaction_drops_stale_interactions(tmp_path: Path) -> None:
     messages = transcript(14)
     judge = FakeJudge(call=0.05, result=0.05)
     result = compact_transcript(
         messages,
         judge,
         config=CompactionConfig(trigger_tokens=100, preserve_recent_messages=4),
+        receipts=ReceiptStore(tmp_path),
     )
     assert result.compacted
     assert result.dropped > 0
     assert result.tokens_after < result.tokens_before
-    assert result.messages_after < result.messages_before
+    assert result.messages_after <= result.messages_before
     assert reduction_percent(result) > 0
     assert result.usage.requests >= 1
     assert result.usage.input_tokens > 0
 
 
-def test_compaction_truncates_when_only_the_call_still_matters() -> None:
+def test_compaction_truncates_when_only_the_call_still_matters(tmp_path: Path) -> None:
     messages = transcript(14)
     result = compact_transcript(
         messages,
         FakeJudge(call=0.95, result=0.05),
         config=CompactionConfig(trigger_tokens=100, preserve_recent_messages=4),
+        receipts=ReceiptStore(tmp_path),
     )
     assert result.compacted
     assert result.truncated > 0
@@ -297,12 +320,13 @@ def test_compaction_truncates_when_only_the_call_still_matters() -> None:
     assert result.messages_after == result.messages_before
 
 
-def test_compaction_keeps_everything_when_jev_says_keep() -> None:
+def test_compaction_keeps_everything_when_jev_says_keep(tmp_path: Path) -> None:
     messages = transcript(14)
     result = compact_transcript(
         messages,
         FakeJudge(call=0.95, result=0.95),
         config=CompactionConfig(trigger_tokens=100, preserve_recent_messages=4),
+        receipts=ReceiptStore(tmp_path),
     )
     assert not result.compacted
     assert result.reason == "reduction_too_small"
@@ -320,12 +344,13 @@ def test_compaction_preserves_the_task_and_recent_messages() -> None:
     assert result.messages[-6:] == messages[-6:]
 
 
-def test_compaction_fails_open_when_jev_fails() -> None:
+def test_compaction_fails_open_when_jev_fails(tmp_path: Path) -> None:
     messages = transcript(14)
     result = compact_transcript(
         messages,
         BrokenJudge(),
         config=CompactionConfig(trigger_tokens=100, preserve_recent_messages=4),
+        receipts=ReceiptStore(tmp_path),
     )
     assert not result.compacted
     assert result.reason == "jev_unavailable"
@@ -333,7 +358,7 @@ def test_compaction_fails_open_when_jev_fails() -> None:
     assert transcript_tokens(result.messages) == result.tokens_before
 
 
-def test_compaction_fails_open_on_invalid_answers() -> None:
+def test_compaction_fails_open_on_invalid_answers(tmp_path: Path) -> None:
     class PartialJudge:
         def evaluate(
             self, state: Mapping[str, Any], questions: Mapping[str, Any]
@@ -345,6 +370,7 @@ def test_compaction_fails_open_on_invalid_answers() -> None:
         transcript(14),
         PartialJudge(),
         config=CompactionConfig(trigger_tokens=100, preserve_recent_messages=4),
+        receipts=ReceiptStore(tmp_path),
     )
     assert not result.compacted
     assert result.reason == "jev_unavailable"
@@ -360,7 +386,7 @@ def test_compaction_stops_when_nothing_is_eligible() -> None:
     assert result.reason == "nothing_eligible"
 
 
-def test_compaction_batches_questions_under_the_request_limit() -> None:
+def test_compaction_batches_questions_under_the_request_limit(tmp_path: Path) -> None:
     judge = FakeJudge(call=0.0, result=0.0)
     compact_transcript(
         transcript(30),
@@ -371,16 +397,18 @@ def test_compaction_batches_questions_under_the_request_limit() -> None:
             max_state_tokens=25_000,
             max_request_tokens=5800,
         ),
+        receipts=ReceiptStore(tmp_path),
     )
     assert len(judge.batches) > 1
     assert all(judge.states[0] == state for state in judge.states)
 
 
-def test_result_dictionary_reports_the_pass() -> None:
+def test_result_dictionary_reports_the_pass(tmp_path: Path) -> None:
     result = compact_transcript(
         transcript(14),
         FakeJudge(call=0.0, result=0.0),
         config=CompactionConfig(trigger_tokens=100, preserve_recent_messages=4),
+        receipts=ReceiptStore(tmp_path),
     )
     payload = result.to_dict()
     assert payload["compacted"] is True
