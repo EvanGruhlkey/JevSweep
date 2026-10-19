@@ -6,14 +6,11 @@ import statistics
 from collections.abc import Sequence
 from typing import Any
 
-from benchmarks.agent import COMPACTION_CONDITIONS, CONDITIONS
+from benchmarks.agent import CONDITIONS
 
 LABELS = {
     "baseline": "Baseline",
-    "rules": "Simple Rules",
     "live_pruning": "Live Pruning",
-    "compaction_only": "Compaction Only",
-    "full_contextlens": "Full ContextLens",
 }
 
 TOTAL_FIELDS = (
@@ -48,9 +45,6 @@ HEADLINE_COLUMNS = (
     ("tool_output_tokens_removed", "Tokens Removed"),
     ("agent_turns", "Agent Turns"),
     ("tool_calls", "Tool Calls"),
-    ("compaction_events", "Compaction Events"),
-    ("compaction_tokens_removed", "Compaction Tokens Removed"),
-    ("tasks_with_compaction", "Tasks Compacted"),
     ("recovery_calls", "Recovery Calls"),
     ("recovered_tokens", "Recovered Tokens"),
     ("jev_input_tokens", "Jev Input"),
@@ -257,21 +251,16 @@ def markdown(report: dict[str, Any]) -> str:
     lines += ["", "## Per task", ""]
     lines += [
         "| Task | " + " | ".join(f"{LABELS[name]} Fix" for name in CONDITIONS) + " | "
-        + " | ".join(f"{LABELS[name]} Input" for name in CONDITIONS) + " | Compacted |",
+        + " | ".join(f"{LABELS[name]} Input" for name in CONDITIONS) + " |",
         "| --- | " + " | ".join("---" for _ in CONDITIONS) + " | "
-        + " | ".join("---:" for _ in CONDITIONS) + " | --- |",
+        + " | ".join("---:" for _ in CONDITIONS) + " |",
     ]
     for task in analysis["tasks"]:
         marks = [mark(task[name]["passed"]) for name in CONDITIONS]
         inputs = [comma(task[name]["input_tokens"]) for name in CONDITIONS]
-        compacted = ", ".join(
-            LABELS[name]
-            for name in CONDITIONS
-            if name in COMPACTION_CONDITIONS and task[name]["compaction_triggered"]
-        )
         lines.append(
             f"| {task['case']} | "
-            + " | ".join([*marks, *inputs, compacted or "none"])
+            + " | ".join([*marks, *inputs])
             + " |"
         )
     lines += ["", "## Regressions", ""]
@@ -380,13 +369,6 @@ def _notes(report: dict[str, Any], analysis: dict[str, Any]) -> list[str]:
             f"{comma(row['recovery_calls'])} recovery call(s) restored "
             f"{comma(row['recovered_tokens'])} tokens."
         )
-        if name in COMPACTION_CONDITIONS:
-            detail += (
-                f" Compaction fired on {comma(row['tasks_with_compaction'])} of "
-                f"{comma(row['attempts'])} attempt(s) across "
-                f"{comma(row['compaction_events'])} event(s), removing "
-                f"{comma(row['compaction_tokens_removed'])} transcript tokens."
-            )
         notes += [detail, ""]
     if report.get("note"):
         notes += [str(report["note"]), ""]
