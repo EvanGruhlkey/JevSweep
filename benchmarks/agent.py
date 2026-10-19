@@ -36,8 +36,15 @@ from contextlens.models import (
     transcript_tokens,
 )
 from contextlens.receipts import ReceiptStore
+from contextlens.rules import RuleBasedPruner
 
-CONDITIONS = ("baseline", "live_pruning", "compaction_only", "full_contextlens")
+CONDITIONS = (
+    "baseline",
+    "rules",
+    "live_pruning",
+    "compaction_only",
+    "full_contextlens",
+)
 LIVE_PRUNING_CONDITIONS = frozenset({"live_pruning", "full_contextlens"})
 COMPACTION_CONDITIONS = frozenset({"compaction_only", "full_contextlens"})
 DEFAULT_MAX_TURNS = 20
@@ -326,6 +333,7 @@ def run_agent(
             config=prune_config,
         )
     middleware = ToolResultMiddleware(session) if session is not None else None
+    rules = RuleBasedPruner(receipts) if condition == "rules" else None
     compactor = (
         compaction_config or CompactionConfig()
         if condition in COMPACTION_CONDITIONS
@@ -357,6 +365,8 @@ def run_agent(
             text = raw
             if middleware is not None and action.name in PRUNABLE_TOOLS:
                 text = middleware.process(action.name, action.arguments, raw)
+            elif rules is not None and action.name in PRUNABLE_TOOLS:
+                text = rules.prune(raw)
             if action.name != "recover":
                 metrics.raw_tool_output_tokens += estimate_tokens(raw)
                 metrics.injected_tool_output_tokens += estimate_tokens(text)

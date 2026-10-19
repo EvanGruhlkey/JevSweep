@@ -4,13 +4,14 @@ One question: **can cheap Jev relevance decisions reduce the context the coding
 model processes, without lowering verified task success or changing how the
 agent behaves?**
 
-Three conditions share the same frozen tasks, model, reasoning effort, tools,
+Five conditions share the same frozen tasks, model, reasoning effort, tools,
 prompt, repository revision, timeout, and turn limit. The agent is never told
 that ContextLens exists.
 
 | Condition | Live pruning | Transcript compaction |
 | --- | --- | --- |
 | `baseline` | no | no |
+| `rules` | simple deterministic progress filtering | no |
 | `live_pruning` | yes | no |
 | `compaction_only` | no | yes |
 | `full_contextlens` | yes | yes |

@@ -207,6 +207,9 @@ Without a Jev gateway key, pruning and compaction fail open and return the origi
 ## Benchmark it
 
 The paired benchmark runs the same frozen coding tasks under multiple context conditions.
+Its current runner includes baseline, a simple deterministic rules condition,
+Jev live pruning, compaction only, and Jev with compaction. Historical result
+tables above predate the rules condition and remain labeled as such.
 
 ```bash
 export OPENAI_API_KEY="..."

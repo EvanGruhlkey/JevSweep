@@ -378,15 +378,19 @@ def test_local_judge_protects_diagnostics_and_task_words() -> None:
     assert probabilities["c3"] > 0.5
 
 
-def test_offline_harness_measures_all_four_conditions(tmp_path: Path) -> None:
+def test_offline_harness_measures_all_conditions(tmp_path: Path) -> None:
     report = run_offline(tmp_path / "offline.json")
     rows = {row["condition"]: row for row in report["rows"]}
     assert set(rows) == set(CONDITIONS)
     baseline = rows["baseline"]
+    rules = rows["rules"]
     pruned = rows["live_pruning"]
     compacted = rows["compaction_only"]
     both = rows["full_contextlens"]
     assert baseline["injected_tool_output_tokens"] == baseline["raw_tool_output_tokens"]
+    assert (
+        rules["injected_tool_output_tokens"] <= baseline["injected_tool_output_tokens"]
+    )
     assert (
         pruned["injected_tool_output_tokens"] < baseline["injected_tool_output_tokens"]
     )
@@ -462,6 +466,7 @@ def test_analysis_records_quality_regressions() -> None:
     analysis = analyze(
         [
             row("baseline", True),
+            row("rules", True),
             row("live_pruning", False),
             row("compaction_only", True),
             row("full_contextlens", True),
