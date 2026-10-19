@@ -20,9 +20,7 @@ TRANSCRIPT_TAIL_BYTES = 512_000
 
 def _filter(task: str, output: str, tool: str, arguments: Mapping[str, Any]) -> str:
     session = PruneSession(
-        ReceiptStore(
-            Path(os.environ.get("JEVSWEEP_RECEIPTS", ".jevsweep/receipts"))
-        ),
+        ReceiptStore(Path(os.environ.get("JEVSWEEP_RECEIPTS", ".jevsweep/receipts"))),
         task=task,
     )
     result = ToolResultMiddleware(session).process(tool, arguments, output)

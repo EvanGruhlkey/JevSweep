@@ -24,8 +24,6 @@ TOTAL_FIELDS = (
     "tool_output_tokens_removed",
     "agent_turns",
     "tool_calls",
-    "compaction_events",
-    "compaction_tokens_removed",
     "recovery_calls",
     "recovered_tokens",
     "jev_requests",
@@ -87,9 +85,6 @@ def analyze(rows: Sequence[dict[str, Any]], expected_pairs: int) -> dict[str, An
                 row["status"] != "completed" for row in selected
             ),
             **{field: _total(selected, field) for field in TOTAL_FIELDS},
-            "tasks_with_compaction": sum(
-                bool(row.get("compaction_triggered")) for row in selected
-            ),
             "jev_cost": format(cost, "f"),
             "wall_clock_seconds": (
                 round(
@@ -182,9 +177,6 @@ def analyze(rows: Sequence[dict[str, Any]], expected_pairs: int) -> dict[str, An
                         "injected_tool_output_tokens": group[name].get(
                             "injected_tool_output_tokens"
                         ),
-                        "compaction_triggered": bool(
-                            group[name].get("compaction_triggered")
-                        ),
                         "status": group[name]["status"],
                     }
                     for name in CONDITIONS
@@ -218,9 +210,11 @@ def markdown(report: dict[str, Any]) -> str:
         "## Aggregate",
         "",
     ]
-    header = "| Condition | " + " | ".join(
-        title for _field, title in HEADLINE_COLUMNS
-    ) + " |"
+    header = (
+        "| Condition | "
+        + " | ".join(title for _field, title in HEADLINE_COLUMNS)
+        + " |"
+    )
     rule = "| --- | " + " | ".join("---:" for _ in HEADLINE_COLUMNS) + " |"
     lines += [header, rule]
     for condition in CONDITIONS:
@@ -250,19 +244,21 @@ def markdown(report: dict[str, Any]) -> str:
         lines.append(f"| {title} | " + " | ".join(cells) + " |")
     lines += ["", "## Per task", ""]
     lines += [
-        "| Task | " + " | ".join(f"{LABELS[name]} Fix" for name in CONDITIONS) + " | "
-        + " | ".join(f"{LABELS[name]} Input" for name in CONDITIONS) + " |",
-        "| --- | " + " | ".join("---" for _ in CONDITIONS) + " | "
-        + " | ".join("---:" for _ in CONDITIONS) + " |",
+        "| Task | "
+        + " | ".join(f"{LABELS[name]} Fix" for name in CONDITIONS)
+        + " | "
+        + " | ".join(f"{LABELS[name]} Input" for name in CONDITIONS)
+        + " |",
+        "| --- | "
+        + " | ".join("---" for _ in CONDITIONS)
+        + " | "
+        + " | ".join("---:" for _ in CONDITIONS)
+        + " |",
     ]
     for task in analysis["tasks"]:
         marks = [mark(task[name]["passed"]) for name in CONDITIONS]
         inputs = [comma(task[name]["input_tokens"]) for name in CONDITIONS]
-        lines.append(
-            f"| {task['case']} | "
-            + " | ".join([*marks, *inputs])
-            + " |"
-        )
+        lines.append(f"| {task['case']} | " + " | ".join([*marks, *inputs]) + " |")
     lines += ["", "## Regressions", ""]
     lines += _regressions(analysis)
     lines += ["", "## Notes", ""]

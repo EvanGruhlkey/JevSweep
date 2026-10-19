@@ -1,32 +1,11 @@
-"""Shared value types for live pruning and transcript compaction.
-
-Two layers share these types: live pruning reduces one tool result before the
-coding model reads it, and compaction removes stale tool interactions from a
-long transcript. Nothing here talks to a model.
-"""
+"""Fast token estimates and value types used by the pruning engine."""
 
 from __future__ import annotations
 
 import math
 import re
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
-from types import MappingProxyType
-from typing import Any
-
-MUTATING_TOOLS = frozenset(
-    {
-        "apply_patch",
-        "create_file",
-        "edit",
-        "edit_file",
-        "patch",
-        "str_replace",
-        "write",
-        "write_file",
-    }
-)
 
 _TOKEN_PIECES = re.compile(r"[A-Za-z]+|\d+|[^\sA-Za-z\d]")
 _DIGIT = re.compile(r"\d")
@@ -91,90 +70,3 @@ class LineRange:
             "end_line": self.end_line,
             "line_count": self.line_count,
         }
-
-
-@dataclass(frozen=True, slots=True)
-class ToolUse:
-    """One tool call made by the assistant."""
-
-    tool_use_id: str
-    tool: str
-    arguments: Mapping[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if not self.tool_use_id.strip():
-            raise ValueError("tool_use_id cannot be empty")
-        if not self.tool.strip():
-            raise ValueError("tool cannot be empty")
-        object.__setattr__(self, "arguments", MappingProxyType(dict(self.arguments)))
-
-    @property
-    def mutating(self) -> bool:
-        return self.tool.lower() in MUTATING_TOOLS
-
-
-@dataclass(frozen=True, slots=True)
-class ToolResult:
-    """The observation one tool call produced, paired by ``tool_use_id``."""
-
-    tool_use_id: str
-    text: str
-    is_error: bool = False
-    receipt_id: str | None = None
-
-    def __post_init__(self) -> None:
-        if not self.tool_use_id.strip():
-            raise ValueError("tool_use_id cannot be empty")
-
-
-@dataclass(frozen=True, slots=True)
-class Message:
-    """One transcript message.
-
-    ``pinned`` marks content compaction must never touch, such as an explicit
-    user constraint or information that cannot be regenerated.
-    """
-
-    role: str
-    text: str = ""
-    tool_uses: tuple[ToolUse, ...] = ()
-    tool_results: tuple[ToolResult, ...] = ()
-    pinned: bool = False
-
-    def __post_init__(self) -> None:
-        if self.role not in {"system", "user", "assistant"}:
-            raise ValueError(f"unsupported role: {self.role!r}")
-        object.__setattr__(self, "tool_uses", tuple(self.tool_uses))
-        object.__setattr__(self, "tool_results", tuple(self.tool_results))
-
-    @property
-    def empty(self) -> bool:
-        return (
-            not self.text.strip() and not self.tool_uses and not self.tool_results
-        )
-
-    @property
-    def chars(self) -> int:
-        """Characters of text, tool arguments, and tool output this message holds."""
-
-        total = len(self.text)
-        for use in self.tool_uses:
-            total += len(repr(dict(use.arguments)))
-        for result in self.tool_results:
-            total += len(result.text)
-        return total
-
-
-def transcript_chars(messages: tuple[Message, ...]) -> int:
-    return sum(message.chars for message in messages)
-
-
-def transcript_tokens(messages: tuple[Message, ...]) -> int:
-    total = 0
-    for message in messages:
-        total += estimate_tokens(message.text)
-        for use in message.tool_uses:
-            total += estimate_tokens(repr(dict(use.arguments)))
-        for result in message.tool_results:
-            total += estimate_tokens(result.text)
-    return total

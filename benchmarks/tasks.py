@@ -151,8 +151,7 @@ def verify(
                 {"command": list(command), "returncode": None, "error": str(error)}
             )
     return {
-        "success": bool(results)
-        and all(item["returncode"] == 0 for item in results),
+        "success": bool(results) and all(item["returncode"] == 0 for item in results),
         "commands": results,
     }
 

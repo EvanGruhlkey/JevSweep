@@ -23,10 +23,10 @@ from pathlib import Path
 from typing import Any
 
 from benchmarks.agent import CONDITIONS, Answer, ToolCall, run_agent
+from benchmarks.models import Message
 from benchmarks.report import analyze, markdown
 from jevsweep.filtering import PruneConfig, protected_line
 from jevsweep.jev import Evaluation
-from jevsweep.models import Message
 
 NOISE_LINES = 1200
 SCRIPT = (
@@ -259,7 +259,6 @@ def main(argv: list[str] | None = None) -> int:
                         "raw_tool_output_tokens",
                         "injected_tool_output_tokens",
                         "tool_output_tokens_removed",
-                        "compaction_events",
                         "final_transcript_tokens",
                         "jev_requests",
                     )

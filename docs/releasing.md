@@ -10,9 +10,8 @@ revision that passes the complete local and CI validation matrix.
 3. Run:
 
    ```bash
-   ruff check .
-   mypy
-   mypy --ignore-missing-imports benchmarks tests
+   ruff check src tests benchmarks
+   mypy src/jevsweep benchmarks
    pytest
    python -m benchmarks.offline --output benchmarks/results/offline.json
    python -m build
@@ -27,7 +26,7 @@ revision that passes the complete local and CI validation matrix.
    ```
 
 5. Confirm the offline harness still shows live pruning reducing injected
-   tool-output tokens and compaction reducing final transcript tokens.
+   tool-output tokens.
 6. Confirm no report in `benchmarks/results/` or `docs/history/` contains a
    credential or a private repository path.
 7. Create a signed version tag only after CI passes.

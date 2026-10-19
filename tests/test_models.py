@@ -2,15 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from benchmarks.models import Message, ToolResult, ToolUse, transcript_tokens
 from jevsweep.models import (
     LineRange,
-    Message,
-    ToolResult,
-    ToolUse,
     estimate_state_tokens,
     estimate_tokens,
-    transcript_chars,
-    transcript_tokens,
 )
 
 
@@ -54,26 +50,9 @@ def test_tool_use_arguments_are_immutable() -> None:
         use.arguments["pattern"] = "y"  # type: ignore[index]
 
 
-def test_mutating_tools_are_recognized() -> None:
-    assert ToolUse("t1", "apply_patch", {}).mutating
-    assert ToolUse("t2", "Write_File", {}).mutating
-    assert not ToolUse("t3", "read_file", {}).mutating
-
-
 def test_message_rejects_unknown_role() -> None:
     with pytest.raises(ValueError):
         Message("tool", "text")
-
-
-def test_message_emptiness_and_size() -> None:
-    assert Message("assistant").empty
-    message = Message(
-        "assistant",
-        "checking",
-        (ToolUse("t1", "grep", {"pattern": "abc"}),),
-    )
-    assert not message.empty
-    assert message.chars > len("checking")
 
 
 def test_transcript_totals_include_results() -> None:
@@ -82,5 +61,4 @@ def test_transcript_totals_include_results() -> None:
         Message("assistant", "", (ToolUse("t1", "grep", {"pattern": "x"}),)),
         Message("user", "", (), (ToolResult("t1", "a\nb\nc"),)),
     )
-    assert transcript_chars(messages) > 0
     assert transcript_tokens(messages) > 0

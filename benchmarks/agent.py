@@ -1,4 +1,4 @@
-"""Host-owned coding agent with transparent JevSweep layers.
+"""Host-owned coding agent with tool-output pruning before inference.
 
 Every condition gets the same task text, tool set, model, reasoning effort,
 timeout, turn limit, and hidden grader. The agent is never told that
@@ -6,9 +6,6 @@ JevSweep exists:
 
     baseline          raw tool output, transcript grows untouched
     live_pruning      large tool results pruned before the model reads them
-    compaction_only   raw tool output, but stale tool interactions compacted
-                      out of the transcript once it passes the threshold
-    full_jevsweep  both layers
 """
 
 from __future__ import annotations
@@ -24,24 +21,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from jevsweep.compaction import CompactionConfig, compact_transcript
+from benchmarks.models import Message, ToolResult, ToolUse, transcript_tokens
 from jevsweep.filtering import PruneConfig, PruneSession
 from jevsweep.jev import JevGateway, Judge
 from jevsweep.middleware import ToolResultMiddleware
 from jevsweep.models import (
-    Message,
-    ToolResult,
-    ToolUse,
     estimate_tokens,
-    transcript_tokens,
 )
 from jevsweep.receipts import ReceiptStore
-from jevsweep.rules import RuleBasedPruner
 
 CONDITIONS = ("baseline", "live_pruning")
-EXPERIMENTAL_CONDITIONS = ("rules", "compaction_only", "full_jevsweep")
-LIVE_PRUNING_CONDITIONS = frozenset({"live_pruning", "full_jevsweep"})
-COMPACTION_CONDITIONS = frozenset({"compaction_only", "full_jevsweep"})
 DEFAULT_MAX_TURNS = 20
 DEFAULT_COMMAND_TIMEOUT = 30
 MAX_TOOL_OUTPUT_CHARS = 400_000
@@ -142,14 +131,10 @@ class RunMetrics:
     tool_calls: int = 0
     raw_tool_output_tokens: int = 0
     injected_tool_output_tokens: int = 0
-    compaction_attempts: int = 0
-    compaction_events: int = 0
-    compaction_tokens_removed: int = 0
     final_transcript_tokens: int = 0
     recovery_calls: int = 0
     recovered_tokens: int = 0
     prune_reasons: dict[str, int] = field(default_factory=dict)
-    compaction_reasons: dict[str, int] = field(default_factory=dict)
     usage: dict[str, int] = field(default_factory=dict)
     jev: dict[str, Any] = field(default_factory=dict)
 
@@ -160,7 +145,6 @@ class RunMetrics:
             "agent_seconds": self.agent_seconds,
             "agent_turns": self.agent_turns,
             "tool_calls": self.tool_calls,
-            "compaction_triggered": self.compaction_events > 0,
             "raw_tool_output_tokens": self.raw_tool_output_tokens,
             "injected_tool_output_tokens": self.injected_tool_output_tokens,
             "tool_output_tokens_removed": removed,
@@ -169,14 +153,10 @@ class RunMetrics:
                 if self.raw_tool_output_tokens
                 else 0.0
             ),
-            "compaction_attempts": self.compaction_attempts,
-            "compaction_events": self.compaction_events,
-            "compaction_tokens_removed": self.compaction_tokens_removed,
             "final_transcript_tokens": self.final_transcript_tokens,
             "recovery_calls": self.recovery_calls,
             "recovered_tokens": self.recovered_tokens,
             "prune_reasons": dict(self.prune_reasons),
-            "compaction_reasons": dict(self.compaction_reasons),
             **{
                 key: None if self.usage.get("_missing") else self.usage.get(key)
                 for key in (
@@ -309,18 +289,17 @@ def run_agent(
     solver: Solver | None = None,
     judge: Judge | None = None,
     prune_config: PruneConfig | None = None,
-    compaction_config: CompactionConfig | None = None,
 ) -> tuple[RunMetrics, tuple[Message, ...]]:
     """Run one attempt and return its metrics with the final transcript."""
 
-    if condition not in (*CONDITIONS, *EXPERIMENTAL_CONDITIONS):
+    if condition not in CONDITIONS:
         raise ValueError(f"unknown condition: {condition!r}")
     state.mkdir(parents=True, exist_ok=True)
     receipts = ReceiptStore(state / "receipts")
     metrics = RunMetrics()
     usage: dict[str, int] = {}
     session: PruneSession | None = None
-    if condition in LIVE_PRUNING_CONDITIONS:
+    if condition == "live_pruning":
         session = PruneSession(
             receipts,
             task=task,
@@ -328,12 +307,6 @@ def run_agent(
             config=prune_config,
         )
     middleware = ToolResultMiddleware(session) if session is not None else None
-    rules = RuleBasedPruner(receipts) if condition == "rules" else None
-    compactor = (
-        compaction_config or CompactionConfig()
-        if condition in COMPACTION_CONDITIONS
-        else None
-    )
     tools = workspace_tools(workspace)
     prompt = coding_prompt(task)
     messages: list[Message] = [Message("user", prompt)]
@@ -360,8 +333,6 @@ def run_agent(
             text = raw
             if middleware is not None and action.name in PRUNABLE_TOOLS:
                 text = middleware.process(action.name, action.arguments, raw)
-            elif rules is not None and action.name in PRUNABLE_TOOLS:
-                text = rules.prune(raw)
             if action.name != "recover":
                 metrics.raw_tool_output_tokens += estimate_tokens(raw)
                 metrics.injected_tool_output_tokens += estimate_tokens(text)
@@ -371,11 +342,8 @@ def run_agent(
                     "",
                     (),
                     (ToolResult(action.call_id, text, is_error),),
-                    pinned=action.name == "recover",
                 )
             )
-            if compactor is not None:
-                messages = _compact(messages, compactor, judge, receipts, metrics, task)
         else:
             raise TurnLimitExceeded(f"agent exceeded {max_turns} turns")
     except TurnLimitExceeded:
@@ -399,7 +367,15 @@ def run_agent(
     metrics.usage = dict(usage)
     if session is not None:
         metrics.prune_reasons = session.reasons()
-    metrics.jev = _jev_totals(session, metrics)
+        metrics.jev = {
+            key: session.metrics()[key]
+            for key in (
+                "jev_requests",
+                "jev_input_tokens",
+                "jev_output_tokens",
+                "jev_cost",
+            )
+        }
     return metrics, tuple(messages)
 
 
@@ -430,64 +406,10 @@ def _execute(
     return output[:MAX_TOOL_OUTPUT_CHARS], False
 
 
-def _compact(
-    messages: list[Message],
-    config: CompactionConfig,
-    judge: Judge | None,
-    receipts: ReceiptStore,
-    metrics: RunMetrics,
-    task: str,
-) -> list[Message]:
-    if transcript_tokens(tuple(messages)) < config.trigger_tokens:
-        return messages
-    metrics.compaction_attempts += 1
-    result = compact_transcript(
-        messages,
-        judge if judge is not None else JevGateway(),
-        config=config,
-        receipts=receipts,
-        task=task,
-    )
-    metrics.jev.setdefault("compaction", []).append(result.usage.to_dict())
-    metrics.compaction_reasons[result.reason] = (
-        metrics.compaction_reasons.get(result.reason, 0) + 1
-    )
-    if not result.compacted:
-        return messages
-    metrics.compaction_events += 1
-    metrics.compaction_tokens_removed += result.tokens_removed
-    return list(result.messages)
-
-
-def _jev_totals(session: PruneSession | None, metrics: RunMetrics) -> dict[str, Any]:
-    requests = 0
-    input_tokens = 0
-    output_tokens = 0
-    cost = 0.0
-    if session is not None:
-        totals = session.metrics()
-        requests += int(totals["jev_requests"])
-        input_tokens += int(totals["jev_input_tokens"])
-        output_tokens += int(totals["jev_output_tokens"])
-        cost += float(totals["jev_cost"])
-    for entry in metrics.jev.get("compaction", []):
-        requests += int(entry["jev_requests"])
-        input_tokens += int(entry["jev_input_tokens"])
-        output_tokens += int(entry["jev_output_tokens"])
-        cost += float(entry["jev_cost"])
-    return {
-        "jev_requests": requests,
-        "jev_input_tokens": input_tokens,
-        "jev_output_tokens": output_tokens,
-        "jev_cost": format(cost, "f"),
-    }
-
-
 def response_input(messages: Sequence[Message]) -> list[dict[str, Any]]:
     """Convert the transcript into Responses API input items.
 
-    The whole transcript is sent every turn, so compaction is visible to the
-    model exactly as it is to us. All conditions use the same conversion.
+    All conditions use the same conversion.
     """
 
     items: list[dict[str, Any]] = []

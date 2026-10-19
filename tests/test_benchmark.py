@@ -21,14 +21,13 @@ from benchmarks.agent import (
     sanitized_environment,
     workspace_tools,
 )
+from benchmarks.models import Message, ToolResult, ToolUse
 from benchmarks.offline import LocalJudge, build_repository
 from benchmarks.offline import run as run_offline
 from benchmarks.report import analyze, comma, markdown
 from benchmarks.tasks import load_task, load_tasks, verify
-from jevsweep.compaction import CompactionConfig
 from jevsweep.filtering import PruneConfig
 from jevsweep.jev import Evaluation
-from jevsweep.models import Message, ToolResult, ToolUse
 
 
 class DropJudge:
@@ -316,42 +315,6 @@ def test_bad_recovery_handles_do_not_break_the_run(tmp_path: Path) -> None:
     assert texts[2].startswith("Tool unavailable")
 
 
-def test_compaction_shrinks_the_transcript(tmp_path: Path) -> None:
-    workspace = noisy_repository(tmp_path / "repo")
-    script = [
-        ToolCall("read_file", {"path": "log.txt"}, f"c{index}") for index in range(8)
-    ]
-    plain, plain_transcript = run_agent(
-        workspace,
-        "read the log",
-        "live_pruning",
-        state=tmp_path / "plain",
-        solver=solver_for(script),
-        judge=DropJudge(),
-        prune_config=PruneConfig(minimum_tokens=10_000_000),
-        max_turns=12,
-    )
-    compacted, compacted_transcript = run_agent(
-        workspace,
-        "read the log",
-        "full_jevsweep",
-        state=tmp_path / "compacted",
-        solver=solver_for(script),
-        judge=DropJudge(),
-        prune_config=PruneConfig(minimum_tokens=10_000_000),
-        compaction_config=CompactionConfig(
-            trigger_tokens=2_000, preserve_recent_messages=4
-        ),
-        max_turns=12,
-    )
-    first = compacted.to_dict()
-    assert first["compaction_events"] > 0
-    assert first["compaction_tokens_removed"] > 0
-    assert first["final_transcript_tokens"] < plain.to_dict()["final_transcript_tokens"]
-    assert first["agent_turns"] == plain.to_dict()["agent_turns"]
-    assert compacted_transcript[0] == plain_transcript[0]
-
-
 def test_unknown_conditions_are_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         run_agent(
@@ -417,7 +380,6 @@ def test_offline_harness_measures_all_conditions(tmp_path: Path) -> None:
     assert (
         pruned["injected_tool_output_tokens"] < baseline["injected_tool_output_tokens"]
     )
-    assert pruned["compaction_events"] == 0
     assert report["analysis"]["complete"] is True
     assert "no coding model" in report["note"].lower()
 

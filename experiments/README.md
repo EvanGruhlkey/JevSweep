@@ -1,8 +1,8 @@
 # Experiments
 
 Retired research code. Nothing here is imported by `src/jevsweep`, shipped
-in the wheel, exercised by the test suite, or reachable from the CLI or the MCP
-server. It is kept because the measurements that retired it are worth keeping,
+in the wheel, exercised by the test suite, or reachable from the CLI.
+It is kept because the measurements that retired it are worth keeping,
 not because the code still works against the current package.
 
 | Directory | What it was | Why it is not in the product |
