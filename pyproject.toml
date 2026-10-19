@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "contextlens"
 version = "0.2.0"
-description = "Transparent context-reduction layer for coding agents"
+description = "Jev-based tool-output pruning for coding agents"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -44,6 +44,9 @@ Repository = "https://github.com/EvanGruhlkey/ContextLens.git"
 
 [project.scripts]
 contextlens = "contextlens.cli:main"
+jevsweep-claude-hook = "contextlens.integrations:claude_main"
+jevsweep-run = "contextlens.integrations:codex_main"
+jevsweep-install = "contextlens.install:main"
 
 [tool.hatch.build]
 # The paired benchmark harness is development-only. Expose it to editable

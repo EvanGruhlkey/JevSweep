@@ -21,7 +21,7 @@ DEFAULT_RECEIPTS = Path(".contextlens/receipts")
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="contextlens",
-        description="Transparent context reduction for coding agents",
+        description="Jev-based tool-output pruning for coding agents",
     )
     commands = parser.add_subparsers(dest="subcommand", required=True)
 
