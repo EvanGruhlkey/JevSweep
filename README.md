@@ -1,7 +1,6 @@
 <h1 align="center">JevSweep</h1>
 
-<p align="center"><b>Less tool output in a coding agent's context, before inference.</b><br>
-Jev scores which chunks matter to the task. The coding agent keeps control of every action.</p>
+<p align="center">Jev-powered context optimization for AI coding agents. Reduces token usage by filtering irrelevant tool output before inference.</p>
 
 ## How it works
 
