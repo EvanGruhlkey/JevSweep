@@ -61,7 +61,7 @@ class ReceiptStore:
         )
         content_path, metadata_path = self._paths(receipt_id)
         if content_path.exists():
-            existing = content_path.read_text(encoding="utf-8")
+            existing = _read_exact(content_path)
             if existing != request.content:
                 raise RuntimeError("receipt hash collision")
         else:
@@ -99,7 +99,7 @@ class ReceiptStore:
     ) -> str:
         content_path, _ = self._paths(receipt_id)
         try:
-            content = content_path.read_text(encoding="utf-8")
+            content = _read_exact(content_path)
         except FileNotFoundError as error:
             raise KeyError(receipt_id) from error
         if start_line is None and end_line is None:
@@ -119,5 +119,11 @@ class ReceiptStore:
 
 def _atomic_write(path: Path, content: str) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(content, encoding="utf-8")
+    with temporary.open("w", encoding="utf-8", newline="") as stream:
+        stream.write(content)
     temporary.replace(path)
+
+
+def _read_exact(path: Path) -> str:
+    with path.open("r", encoding="utf-8", newline="") as stream:
+        return stream.read()
