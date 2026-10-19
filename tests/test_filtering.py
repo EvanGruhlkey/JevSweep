@@ -69,6 +69,7 @@ def test_protected_lines_cover_diagnostics_and_results() -> None:
     assert protected_line("Traceback (most recent call last)")
     assert protected_line("=== 3 failed, 5 passed in 2.1s ===")
     assert protected_line("exit: 1")
+    assert protected_line("modified: src/parser.py")
     assert not protected_line("collecting tests")
 
 

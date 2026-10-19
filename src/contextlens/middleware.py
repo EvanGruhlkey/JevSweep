@@ -7,19 +7,13 @@ from functools import wraps
 from typing import Any
 
 from contextlens.filtering import PruneSession
-from contextlens.models import estimate_tokens
 
 
 class ToolResultMiddleware:
     """Install around a synchronous tool dispatcher, once per coding task."""
 
-    def __init__(
-        self, session: PruneSession, *, minimum_expected_savings: int = 512
-    ) -> None:
-        if minimum_expected_savings < 0:
-            raise ValueError("minimum_expected_savings cannot be negative")
+    def __init__(self, session: PruneSession) -> None:
         self.session = session
-        self.minimum_expected_savings = minimum_expected_savings
 
     def wrap(
         self, tool: str, call: Callable[[Mapping[str, Any]], Any]
@@ -37,19 +31,8 @@ class ToolResultMiddleware:
         """Process a raw result at any host tool-result boundary."""
         if not isinstance(result, str):
             return result
-        minimum = max(
-            self.session.config.minimum_tokens,
-            self.minimum_expected_savings * 2,
-        )
-        if estimate_tokens(result) < minimum:
-            return result
         try:
             outcome = self.session.observe(result, tool=tool, arguments=arguments)
         except Exception:
-            return result
-        if (
-            outcome.original_tokens - outcome.retained_tokens
-            < self.minimum_expected_savings
-        ):
             return result
         return outcome.text

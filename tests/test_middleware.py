@@ -12,9 +12,9 @@ def test_wrapped_tool_filters_automatically_and_recovers(tmp_path: Path) -> None
         store,
         task="fix bug",
         judge=FakeJudge(0.0),
-        config=PruneConfig(minimum_tokens=0),
+        config=PruneConfig(minimum_tokens=0, minimum_savings_tokens=10),
     )
-    middleware = ToolResultMiddleware(session, minimum_expected_savings=10)
+    middleware = ToolResultMiddleware(session)
     raw = noise()
     wrapped = middleware.wrap("shell", lambda arguments: raw)
     result = wrapped({"command": "npm ci"})
@@ -28,9 +28,9 @@ def test_wrapper_skips_small_results(tmp_path: Path) -> None:
         ReceiptStore(tmp_path),
         task="fix bug",
         judge=judge,
-        config=PruneConfig(minimum_tokens=0),
+        config=PruneConfig(minimum_tokens=0, minimum_savings_tokens=500),
     )
-    middleware = ToolResultMiddleware(session, minimum_expected_savings=500)
+    middleware = ToolResultMiddleware(session)
     assert middleware.wrap("read_file", lambda arguments: "short")({}) == "short"
     assert not judge.states
 
@@ -42,9 +42,9 @@ def test_protected_diagnostic_survives_while_noise_is_pruned(tmp_path: Path) -> 
         store,
         task="fix failing test",
         judge=judge,
-        config=PruneConfig(minimum_tokens=0),
+        config=PruneConfig(minimum_tokens=0, minimum_savings_tokens=100),
     )
-    middleware = ToolResultMiddleware(session, minimum_expected_savings=100)
+    middleware = ToolResultMiddleware(session)
     lines = noise().splitlines()
     lines[500] = "E   AssertionError: expected 3 got 4"
     raw = "\n".join(lines)

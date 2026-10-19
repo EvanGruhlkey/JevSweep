@@ -42,11 +42,11 @@ from contextlens.models import (
 from contextlens.receipts import ReceiptStore
 
 DEFAULT_MINIMUM_TOKENS = 256
+DEFAULT_MINIMUM_SAVINGS_TOKENS = 512
 DEFAULT_CHUNK_LINES = 20
 DEFAULT_KEEP_THRESHOLD = 0.5
-# Real Jev returns roughly 0.1-0.2 for output it considers disposable, so an
-# uncertainty floor above 0 blocks almost every drop. Opt in deliberately.
-DEFAULT_UNCERTAIN_KEEP_PROBABILITY = 0.0
+# Keep borderline scores; clearly disposable chunks score lower in prior runs.
+DEFAULT_UNCERTAIN_KEEP_PROBABILITY = 0.25
 # Chunks per observation. One observation should cost one or two Jev requests:
 # a high cap multiplies requests, and one rate-limited batch fails the whole
 # observation open. The measured predecessor capped candidates at 16.
@@ -112,6 +112,11 @@ _PYTEST_TOTALS = re.compile(
     r"|errors?|warnings?)\b.*=+\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
+_FILE_CHANGE = re.compile(
+    r"^\s*(?:modified|created|deleted|renamed|new file|changed)\s*:\s*\S"
+    r"|^\s*[MADRCU?!]{1,2}\s+\S",
+    re.IGNORECASE | re.MULTILINE,
+)
 _DIFF = re.compile(r"^(?:diff --git |--- |\+\+\+ |@@ )", re.MULTILINE)
 _SEARCH_TOOLS = frozenset({"find", "fd", "grep", "rg", "ripgrep", "search"})
 _READ_TOOLS = frozenset({"cat", "open_file", "read", "read_file", "view_file"})
@@ -146,7 +151,10 @@ def protected_line(text: str) -> bool:
     """True for lines whose loss would hide a diagnostic or a final result."""
 
     return bool(
-        _DIAGNOSTIC.search(text) or _RESULT.search(text) or _PYTEST_TOTALS.search(text)
+        _DIAGNOSTIC.search(text)
+        or _RESULT.search(text)
+        or _PYTEST_TOTALS.search(text)
+        or _FILE_CHANGE.search(text)
     )
 
 
@@ -155,6 +163,7 @@ class PruneConfig:
     """Thresholds for live pruning. Override with ``CONTEXTLENS_*`` env vars."""
 
     minimum_tokens: int = DEFAULT_MINIMUM_TOKENS
+    minimum_savings_tokens: int = DEFAULT_MINIMUM_SAVINGS_TOKENS
     chunk_lines: int = DEFAULT_CHUNK_LINES
     keep_threshold: float = DEFAULT_KEEP_THRESHOLD
     uncertain_keep_probability: float = DEFAULT_UNCERTAIN_KEEP_PROBABILITY
@@ -165,6 +174,8 @@ class PruneConfig:
     def __post_init__(self) -> None:
         if self.minimum_tokens < 0:
             raise ValueError("minimum_tokens cannot be negative")
+        if self.minimum_savings_tokens < 0:
+            raise ValueError("minimum_savings_tokens cannot be negative")
         if self.chunk_lines < 1:
             raise ValueError("chunk_lines must be positive")
         if self.max_chunks < MIN_CHUNKS_TO_PRUNE:
@@ -180,6 +191,9 @@ class PruneConfig:
     def from_env(cls) -> PruneConfig:
         return cls(
             minimum_tokens=_env_int("CONTEXTLENS_MIN_TOKENS", DEFAULT_MINIMUM_TOKENS),
+            minimum_savings_tokens=_env_int(
+                "CONTEXTLENS_MIN_SAVINGS_TOKENS", DEFAULT_MINIMUM_SAVINGS_TOKENS
+            ),
             chunk_lines=_env_int("CONTEXTLENS_CHUNK_LINES", DEFAULT_CHUNK_LINES),
             max_chunks=_env_int("CONTEXTLENS_MAX_CHUNKS", DEFAULT_MAX_CHUNKS),
             keep_threshold=_env_float(
@@ -322,6 +336,8 @@ class OutputPruner:
 
         if original_tokens < self.config.minimum_tokens:
             return passthrough("below_minimum_tokens")
+        if original_tokens < self.config.minimum_savings_tokens * 2:
+            return passthrough("below_savings_gate")
         if looks_binary(request.output):
             return passthrough("binary")
         if category is OutputCategory.STRUCTURED:
@@ -363,8 +379,8 @@ class OutputPruner:
             return passthrough("kept_all", len(chunks))
         text, omitted = render(chunks, kept, receipt.receipt_id)
         retained_tokens = estimate_tokens(text)
-        if retained_tokens >= original_tokens:
-            return passthrough("no_reduction", len(chunks))
+        if original_tokens - retained_tokens < self.config.minimum_savings_tokens:
+            return passthrough("below_minimum_savings", len(chunks))
         return PruneOutcome(
             text=text,
             receipt_id=receipt.receipt_id,
@@ -460,9 +476,7 @@ class OutputPruner:
     def _uncertain(self, score: float) -> bool:
         """Keep a chunk whose score is low but not confidently disposable.
 
-        A floor of zero disables the safeguard, which is the default: measured
-        against real Jev, disposable output scores around 0.1-0.2, so any floor
-        in that range keeps everything and pruning never happens.
+        Scores above the floor but below the keep threshold are ambiguous.
         """
 
         floor = self.config.uncertain_keep_probability
