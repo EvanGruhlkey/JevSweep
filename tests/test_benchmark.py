@@ -229,6 +229,35 @@ def test_live_pruning_shrinks_tool_output(tmp_path: Path) -> None:
     assert "contextlens omitted" in transcript[2].tool_results[0].text
 
 
+def test_solver_receives_filtered_result_before_next_inference(tmp_path: Path) -> None:
+    workspace = noisy_repository(tmp_path / "repo")
+    original = (workspace / "log.txt").read_text(encoding="utf-8")
+    observed: list[str] = []
+
+    def solver(messages: Sequence[Message]) -> ToolCall | Answer:
+        results = [
+            result.text for message in messages for result in message.tool_results
+        ]
+        if not results:
+            return ToolCall("read_file", {"path": "log.txt"}, "c1")
+        observed.extend(results)
+        return Answer("done")
+
+    metrics, _ = run_agent(
+        workspace,
+        "read the log",
+        "live_pruning",
+        state=tmp_path / "state",
+        solver=solver,
+        judge=DropJudge(),
+        prune_config=PruneConfig(minimum_tokens=100),
+        max_turns=4,
+    )
+    assert metrics.status == "completed"
+    assert observed and original not in observed
+    assert any("contextlens omitted" in result for result in observed)
+
+
 def test_the_agent_can_recover_omitted_output(tmp_path: Path) -> None:
     workspace = noisy_repository(tmp_path / "repo")
     original = (workspace / "log.txt").read_text(encoding="utf-8")
@@ -383,31 +412,13 @@ def test_offline_harness_measures_all_conditions(tmp_path: Path) -> None:
     rows = {row["condition"]: row for row in report["rows"]}
     assert set(rows) == set(CONDITIONS)
     baseline = rows["baseline"]
-    rules = rows["rules"]
     pruned = rows["live_pruning"]
-    compacted = rows["compaction_only"]
-    both = rows["full_contextlens"]
     assert baseline["injected_tool_output_tokens"] == baseline["raw_tool_output_tokens"]
-    assert (
-        rules["injected_tool_output_tokens"] <= baseline["injected_tool_output_tokens"]
-    )
     assert (
         pruned["injected_tool_output_tokens"] < baseline["injected_tool_output_tokens"]
     )
     assert pruned["compaction_events"] == 0
-    assert (
-        compacted["injected_tool_output_tokens"]
-        == baseline["injected_tool_output_tokens"]
-    )
-    assert compacted["compaction_events"] >= 1
-    assert compacted["final_transcript_tokens"] < baseline["final_transcript_tokens"]
-    assert both["compaction_events"] >= 1
-    assert both["final_transcript_tokens"] < pruned["final_transcript_tokens"]
     assert report["analysis"]["complete"] is True
-    assert (
-        report["analysis"]["conditions"]["compaction_only"]["tasks_with_compaction"]
-        == 1
-    )
     assert "no coding model" in report["note"].lower()
 
 
@@ -466,16 +477,11 @@ def test_analysis_records_quality_regressions() -> None:
     analysis = analyze(
         [
             row("baseline", True),
-            row("rules", True),
             row("live_pruning", False),
-            row("compaction_only", True),
-            row("full_contextlens", True),
         ],
         1,
     )
     assert analysis["quality_regressions"]["live_pruning"] == ["a"]
-    assert analysis["quality_regressions"]["compaction_only"] == []
-    assert analysis["quality_regressions"]["full_contextlens"] == []
     text = markdown(
         {
             "started_at": "now",

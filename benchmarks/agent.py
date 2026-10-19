@@ -38,13 +38,8 @@ from contextlens.models import (
 from contextlens.receipts import ReceiptStore
 from contextlens.rules import RuleBasedPruner
 
-CONDITIONS = (
-    "baseline",
-    "rules",
-    "live_pruning",
-    "compaction_only",
-    "full_contextlens",
-)
+CONDITIONS = ("baseline", "live_pruning")
+EXPERIMENTAL_CONDITIONS = ("rules", "compaction_only", "full_contextlens")
 LIVE_PRUNING_CONDITIONS = frozenset({"live_pruning", "full_contextlens"})
 COMPACTION_CONDITIONS = frozenset({"compaction_only", "full_contextlens"})
 DEFAULT_MAX_TURNS = 20
@@ -318,7 +313,7 @@ def run_agent(
 ) -> tuple[RunMetrics, tuple[Message, ...]]:
     """Run one attempt and return its metrics with the final transcript."""
 
-    if condition not in CONDITIONS:
+    if condition not in (*CONDITIONS, *EXPERIMENTAL_CONDITIONS):
         raise ValueError(f"unknown condition: {condition!r}")
     state.mkdir(parents=True, exist_ok=True)
     receipts = ReceiptStore(state / "receipts")

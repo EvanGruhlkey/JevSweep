@@ -1,12 +1,10 @@
-"""Paired coding-agent benchmark for the two ContextLens layers.
+"""Paired coding-agent benchmark for live JevSweep filtering.
 
-Three conditions run the same frozen tasks with the same model, reasoning
+Two conditions run the same frozen tasks with the same model, reasoning
 effort, tools, prompt, repository revision, timeout, and turn limit:
 
     baseline             raw tool output, transcript grows untouched
-    rules                repeated progress lines removed by fixed rules
     live_pruning         large tool results pruned before the coding model
-    live_and_compaction  live pruning plus periodic transcript compaction
 
 Condition order is shuffled per task from a fixed seed. Verification happens on
 a fresh checkout with hidden assertions the agent never sees.
@@ -165,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     output.mkdir(parents=True, exist_ok=False)
     expected_pairs = len(tasks) * arguments.trials
     report: dict[str, Any] = {
-        "benchmark": "paired_coding_agent_contextlens_layers",
+        "benchmark": "paired_coding_agent_tool_filtering",
         "started_at": datetime.now(UTC).isoformat(),
         "implementation_sha256": source_hash(project),
         "implementation_revision": _revision(project),
@@ -177,8 +175,8 @@ def main(argv: list[str] | None = None) -> int:
         "order_seed": SEED,
         "conditions": list(CONDITIONS),
         "integration": (
-            "ContextLens runs on the host tool-response path and on the host "
-            "transcript; the agent prompt never mentions it"
+            "JevSweep runs on the host tool-response path before inference; "
+            "the agent prompt never mentions it"
         ),
         "usage_definition": (
             "coding-model input includes cached input; uncached = input - "
