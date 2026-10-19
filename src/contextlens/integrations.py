@@ -15,6 +15,8 @@ from contextlens.filtering import PruneSession
 from contextlens.middleware import ToolResultMiddleware
 from contextlens.receipts import ReceiptStore
 
+TRANSCRIPT_TAIL_BYTES = 512_000
+
 
 def _filter(task: str, output: str, tool: str, arguments: Mapping[str, Any]) -> str:
     session = PruneSession(
@@ -52,18 +54,66 @@ def claude_hook(payload: Mapping[str, Any], *, task: str) -> dict[str, Any] | No
     }
 
 
+def claude_task(payload: Mapping[str, Any]) -> str:
+    """Read recent user text from Claude's session transcript, or fail open."""
+
+    override = os.environ.get("JEVSWEEP_TASK", "").strip()
+    if override:
+        return override[:2000]
+    name = payload.get("transcript_path")
+    if not isinstance(name, str) or not name:
+        return ""
+    try:
+        with Path(name).expanduser().open("rb") as transcript:
+            transcript.seek(0, 2)
+            transcript.seek(max(0, transcript.tell() - TRANSCRIPT_TAIL_BYTES))
+            tail = transcript.read().decode("utf-8", errors="ignore")
+    except OSError:
+        return ""
+    prompts: list[str] = []
+    for line in reversed(tail.splitlines()):
+        try:
+            entry = json.loads(line)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(entry, dict) or entry.get("type") != "user":
+            continue
+        if entry.get("isMeta") or entry.get("isSidechain"):
+            continue
+        message = entry.get("message")
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            prompt = content
+        elif isinstance(content, list):
+            prompt = "\n".join(
+                block["text"]
+                for block in content
+                if isinstance(block, dict)
+                and block.get("type") == "text"
+                and isinstance(block.get("text"), str)
+            )
+        else:
+            continue
+        if prompt.strip():
+            prompts.append(prompt.strip())
+        if len(prompts) == 3:
+            break
+    return "\n".join(reversed(prompts))[-2000:]
+
+
 def claude_main() -> int:
     """Claude Code calls this after Bash; empty stdout means keep its original."""
 
-    task = os.environ.get("JEVSWEEP_TASK", "").strip()
-    if not task:
-        return 0
     try:
         payload = json.load(sys.stdin)
         if isinstance(payload, dict):
-            replacement = claude_hook(payload, task=task)
-            if replacement is not None:
-                sys.stdout.write(json.dumps(replacement))
+            task = claude_task(payload)
+            if task:
+                replacement = claude_hook(payload, task=task)
+                if replacement is not None:
+                    sys.stdout.write(json.dumps(replacement))
     except Exception:
         # A broken adapter cannot block the coding agent or hide a result.
         return 0

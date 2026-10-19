@@ -42,6 +42,56 @@ def test_claude_hook_replaces_only_stdout_before_delivery(
     assert integrations.claude_hook({**payload, "tool_name": "Write"}, task="t") is None
 
 
+def test_claude_hook_uses_current_session_task_without_env(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.delenv("JEVSWEEP_TASK", raising=False)
+    transcript = tmp_path / "session.jsonl"
+    entries = [
+        {"type": "user", "message": {"content": "Fix the parser bug"}},
+        {
+            "type": "user",
+            "message": {"content": [{"type": "tool_result", "content": "noise"}]},
+        },
+        {
+            "type": "user",
+            "message": {"content": [{"type": "text", "text": "Check tests too"}]},
+        },
+    ]
+    transcript.write_text(
+        "\n".join(json.dumps(entry) for entry in entries), encoding="utf-8"
+    )
+    seen: list[str] = []
+
+    def filter_result(task, output, tool, arguments):
+        seen.append(task)
+        return "filtered"
+
+    monkeypatch.setattr(integrations, "_filter", filter_result)
+    payload = {
+        "transcript_path": str(transcript),
+        "tool_name": "Bash",
+        "tool_input": {"command": "rg parser ."},
+        "tool_response": {"stdout": "raw", "stderr": ""},
+    }
+    assert integrations.claude_hook(payload, task=integrations.claude_task(payload))
+    assert seen == ["Fix the parser bug\nCheck tests too"]
+    stdin = io.StringIO(json.dumps(payload))
+    stdout = io.StringIO()
+    monkeypatch.setattr(sys, "stdin", stdin)
+    monkeypatch.setattr(sys, "stdout", stdout)
+    assert integrations.claude_main() == 0
+    assert (
+        json.loads(stdout.getvalue())["hookSpecificOutput"]["updatedToolOutput"][
+            "stdout"
+        ]
+        == "filtered"
+    )
+    assert (
+        integrations.claude_task({"transcript_path": str(tmp_path / "missing")}) == ""
+    )
+
+
 def test_codex_wrapper_prints_only_filtered_output(tmp_path: Path, monkeypatch) -> None:
     stream = io.BytesIO()
     monkeypatch.setattr(sys, "stdout", type("Output", (), {"buffer": stream})())
